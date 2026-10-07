@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>แผนที่ระบายสีตามข้อมูล Excel</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#eef1f4;--panel:#fff;--ink:#1f2933;--muted:#66727f;--line:#dfe4ea;--accent:#0b6bcb;--soft:#f5f7f9}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:'Sarabun',Tahoma,system-ui,sans-serif;color:var(--ink);background:var(--bg);font-size:14px}
+.app{display:grid;grid-template-columns:340px 1fr;height:100vh}
+.side{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:16px 16px 24px}
+.side header h1{font-size:18px;margin:0}
+.side header p{margin:2px 0 12px;color:var(--muted);font-size:13px}
+section{border-top:1px solid var(--line);padding:12px 0}
+h2{font-size:14px;margin:0 0 8px;display:flex;align-items:center;gap:8px}
+h2 span{width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;display:inline-grid;place-items:center}
+.drop{display:block;border:1.5px dashed #b9c3ce;border-radius:8px;padding:10px 12px;cursor:pointer;background:var(--soft);margin-bottom:8px}
+.drop:hover{border-color:var(--accent)}
+.drop input{display:none}
+.drop b{display:block;font-weight:600;color:var(--accent)}
+.drop small{color:var(--muted);display:block;word-break:break-all}
+.drop.ok{border-style:solid;border-color:#9cc9a0;background:#f2faf3}
+.row{display:grid;grid-template-columns:112px 1fr;align-items:center;gap:8px;margin:6px 0}
+.row>label{color:var(--muted);font-size:13px}
+select,input[type=text],input[type=number],input[type=search]{width:100%;font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);min-width:0}
+input[type=color]{width:100%;height:30px;border:1px solid var(--line);border-radius:6px;padding:2px;background:#fff;cursor:pointer}
+input[type=range]{width:100%}
+.chk{display:flex;gap:6px;align-items:center;font-size:13px;margin:6px 0}
+button{font:inherit;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer}
+button.ghost{background:#fff;color:var(--accent)}
+.actions{display:flex;flex-wrap:wrap;gap:6px}
+.info{font-size:13px;margin-top:8px;line-height:1.55}
+.info .ok{color:#1f7a35}.info .warn{color:#b26a00}
+.info details{margin-top:4px}
+.info details>div{max-height:130px;overflow:auto;font-size:12px;color:var(--muted);background:var(--soft);padding:6px 8px;border-radius:6px}
+footer{border-top:1px solid var(--line);padding-top:12px;font-size:13px}
+footer a{color:var(--accent)}
+main{position:relative;overflow:hidden;background:#f8fafb}
+#map{display:block;width:100%;height:100%;cursor:grab}
+#map:active{cursor:grabbing}
+#map path{transition:fill .25s}
+.toolbar{position:absolute;top:12px;right:12px;display:flex;gap:6px;z-index:2}
+.toolbar input{width:230px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.toolbar button{padding:4px 10px;background:#fff;color:var(--ink);border-color:var(--line);box-shadow:0 1px 4px rgba(0,0,0,.08)}
+#legend{position:absolute;left:12px;bottom:12px;background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:8px;padding:10px 12px;max-height:62%;overflow:auto;min-width:180px;max-width:300px;box-shadow:0 2px 8px rgba(0,0,0,.08);z-index:2}
+.lg-title{font-weight:600}
+.lg-sub{font-size:12px;color:var(--muted);margin-bottom:6px}
+.lg-item{display:grid;grid-template-columns:20px 1fr auto;gap:8px;align-items:center;font-size:13px;padding:2px 0;position:relative}
+.lg-item input{position:absolute;left:0;top:0;width:20px;height:100%;opacity:0;cursor:pointer;padding:0;border:0}
+.lg-sw{width:20px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.15)}
+.lg-n{color:var(--muted);font-size:12px}
+.lg-hint{font-size:11px;color:var(--muted);margin-top:6px}
+#tip{position:absolute;pointer-events:none;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.12);padding:8px 10px;font-size:12.5px;max-width:330px;z-index:4}
+#tip .t-head{font-weight:600;font-size:14px;margin-bottom:2px}
+#tip .t-val{margin:2px 0 6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#tip .sw{width:12px;height:12px;border-radius:2px;border:1px solid rgba(0,0,0,.2);display:inline-block}
+#tip .t-miss{color:#b26a00;margin:2px 0 4px}
+#tip table{border-collapse:collapse}
+#tip th{text-align:left;color:var(--muted);font-weight:400;padding:1px 10px 1px 0;vertical-align:top;white-space:nowrap}
+#tip td{padding:1px 0;word-break:break-word}
+#empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--muted);padding:24px}
+#empty b{color:var(--ink);font-size:16px}
+#dropOverlay{position:fixed;inset:0;background:rgba(11,107,203,.12);border:3px dashed var(--accent);display:grid;place-items:center;font-size:20px;color:var(--accent);z-index:10;pointer-events:none}
+[hidden]{display:none!important}
+@media (max-width:800px){
+  .app{grid-template-columns:1fr;height:auto}
+  main{order:-1;height:62vh}
+  .side{border-right:0}
+  .toolbar input{width:160px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side">
+  <header>
+    <h1>แผนที่ระบายสีตามข้อมูล</h1>
+    <p>TopoJSON + Excel → ระบายสีแต่ละพื้นที่ตามค่าที่เลือก</p>
+  </header>
+
+  <section>
+    <h2><span>1</span>แผนที่ (TopoJSON)</h2>
+    <label class="drop" id="dropMap"><input type="file" id="fMap" accept=".json,.topojson,.geojson">
+      <b>เลือกไฟล์ TopoJSON</b><small id="mapInfo">หรือลากไฟล์มาวางบนหน้านี้ (รองรับ GeoJSON ด้วย)</small></label>
+    <div class="row" id="objRow" hidden><label>เลเยอร์</label><select id="selObj"></select></div>
+  </section>
+
+  <section>
+    <h2><span>2</span>ข้อมูล (Excel)</h2>
+    <label class="drop" id="dropData"><input type="file" id="fData" accept=".xlsx,.xls,.xlsm,.csv">
+      <b>เลือกไฟล์ Excel</b><small id="dataInfo">.xlsx / .xls / .csv</small></label>
+    <div class="row"><label>ชีต</label><select id="selSheet"></select></div>
+    <div class="row"><label>หัวตารางอยู่แถวที่</label><input type="number" id="hdrRow" min="1" value="1"></div>
+    <div class="row"><label>กรองแถว</label><select id="selFilterCol"><option value="">— ไม่กรอง —</option></select></div>
+    <div class="row" id="filterValRow" hidden><label>เท่ากับ</label><select id="selFilterVal"></select></div>
+  </section>
+
+  <section>
+    <h2><span>3</span>จับคู่รหัสพื้นที่</h2>
+    <div class="row"><label>ฟิลด์ในแผนที่</label><select id="selMapKey"></select></div>
+    <div class="row"><label>คอลัมน์ใน Excel</label><select id="selDataKey"></select></div>
+    <label class="chk"><input type="checkbox" id="chkZeros">ไม่สนใจเลข 0 นำหน้า (0101 = 101)</label>
+    <button id="btnAuto" class="ghost">จับคู่อัตโนมัติ</button>
+    <div id="matchInfo" class="info"></div>
+  </section>
+
+  <section>
+    <h2><span>4</span>ระบายสี</h2>
+    <div class="row"><label>ระบายสีตาม</label><select id="selValue"></select></div>
+    <div class="row"><label>ประเภทข้อมูล</label><select id="selMode">
+      <option value="auto">อัตโนมัติ</option>
+      <option value="num">ตัวเลข (ไล่ระดับสี)</option>
+      <option value="cat">หมวดหมู่ / ข้อความ</option>
+      <option value="hex">รหัสสีในเซลล์ (#RRGGBB)</option>
+    </select></div>
+    <div id="numOpts">
+      <div class="row"><label>วิธีแบ่งช่วง</label><select id="selMethod">
+        <option value="quantile">จำนวนพื้นที่เท่ากัน (Quantile)</option>
+        <option value="equal">ช่วงห่างเท่ากัน (Equal)</option>
+        <option value="jenks">ตามการกระจายตัว (Jenks)</option>
+        <option value="manual">กำหนดจุดแบ่งเอง</option>
+      </select></div>
+      <div class="row" id="nRow"><label>จำนวนช่วง</label><input type="number" id="nClass" min="2" max="9" value="5"></div>
+      <div class="row" id="brRow" hidden><label>จุดแบ่ง</label><input type="text" id="breaks" placeholder="เช่น 15, 25, 35"></div>
+      <div class="row"><label>ชุดสี</label><select id="selPal"></select></div>
+      <label class="chk"><input type="checkbox" id="chkRev">กลับลำดับสี</label>
+      <div class="row"><label>รูปแบบตัวเลข</label><select id="selFmt">
+        <option value="auto">ทั่วไป</option>
+        <option value="d0">จำนวนเต็ม</option>
+        <option value="d1">ทศนิยม 1 ตำแหน่ง</option>
+        <option value="d2">ทศนิยม 2 ตำแหน่ง</option>
+        <option value="pctv">ร้อยละ (ค่าเป็น %, เช่น 25.3)</option>
+        <option value="pct01">ร้อยละ (ค่า 0–1, เช่น 0.253)</option>
+      </select></div>
+      <div class="row"><label>ถ้ารหัสซ้ำ</label><select id="selAgg">
+        <option value="first">ใช้แถวแรก</option>
+        <option value="sum">รวม</option>
+        <option value="mean">เฉลี่ย</option>
+        <option value="max">ค่ามากสุด</option>
+      </select></div>
+    </div>
+    <div class="row"><label>สีไม่มีข้อมูล</label><input type="color" id="noData" value="#d5d9de"></div>
+  </section>
+
+  <section>
+    <h2><span>5</span>การแสดงผล</h2>
+    <div class="row"><label>ป้ายชื่อ</label><select id="selLabel"><option value="">— ไม่แสดง —</option></select></div>
+    <label class="chk"><input type="checkbox" id="chkLabelVal">แสดงค่าในป้ายชื่อ</label>
+    <div class="row"><label>ความทึบสี</label><input type="range" id="opacity" min="0.2" max="1" step="0.05" value="0.9"></div>
+    <div class="row"><label>ความหนาเส้นขอบ</label><input type="range" id="stroke" min="0" max="3" step="0.1" value="0.8"></div>
+    <div class="row"><label>สีเส้นขอบ</label><input type="color" id="strokeColor" value="#ffffff"></div>
+    <div class="row"><label>หัวข้อคำอธิบาย</label><input type="text" id="title" placeholder="(ใช้ชื่อคอลัมน์)"></div>
+  </section>
+
+  <section class="actions">
+    <button id="btnPng">บันทึกภาพ PNG</button>
+    <button id="btnSvg" class="ghost">บันทึก SVG</button>
+    <button id="btnCsv" class="ghost">ส่งออกผลจับคู่ (CSV)</button>
+  </section>
+
+  <footer><a href="#" id="demo">ลองด้วยข้อมูลตัวอย่าง</a></footer>
+</aside>
+
+<main id="mapWrap">
+  <div class="toolbar">
+    <input type="search" id="search" list="keys" placeholder="ค้นหารหัสพื้นที่ แล้วกด Enter">
+    <datalist id="keys"></datalist>
+    <button id="btnFit" title="แสดงทั้งแผนที่">⤢</button>
+  </div>
+  <svg id="map"></svg>
+  <div id="legend" hidden></div>
+  <div id="tip" hidden></div>
+  <div id="empty"><div><b>เริ่มจากเลือกไฟล์ TopoJSON และ Excel ทางซ้าย</b><br>หรือลากทั้งสองไฟล์มาวางบนหน้านี้พร้อมกัน<br><br>
+    เลื่อนเมาส์ = ซูม · ลาก = เลื่อนแผนที่ · ดับเบิลคลิกพื้นที่ = ซูมไปที่พื้นที่นั้น</div></div>
+</main>
+</div>
+<div id="dropOverlay" hidden>วางไฟล์ TopoJSON / Excel ที่นี่</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const S = { topo:null, geo:null, geoFields:[], mapName:'', wb:null, dataName:'', cols:[], allRows:[], rows:[],
+            idx:new Map(), dups:0, unmatchedData:[], L:null, custom:{}, sig:'' };
+
+/* ---------- ชุดสี ---------- */
+const PALS = [
+  ['GnYlRd','เขียว → เหลือง → แดง', t=>d3.interpolateRdYlGn(1-t), .05, .95],
+  ['YlOrRd','เหลือง → ส้ม → แดง', d3.interpolateYlOrRd, .12, 1],
+  ['Reds','แดง', d3.interpolateReds, .15, .95],
+  ['Oranges','ส้ม', d3.interpolateOranges, .15, .95],
+  ['Blues','น้ำเงิน', d3.interpolateBlues, .15, .95],
+  ['Greens','เขียว', d3.interpolateGreens, .15, .95],
+  ['Purples','ม่วง', d3.interpolatePurples, .15, .95],
+  ['RdBu','แดง → ขาว → น้ำเงิน', d3.interpolateRdBu, .05, .95],
+  ['Spectral','สเปกตรัม', t=>d3.interpolateSpectral(1-t), .03, .97],
+  ['Viridis','Viridis', d3.interpolateViridis, 0, 1],
+  ['Turbo','Turbo', d3.interpolateTurbo, .1, .9],
+];
+const CAT = [...d3.schemeTableau10, ...d3.schemeSet2, ...d3.schemePaired, ...d3.schemeDark2];
+function ramp(id, n, rev){
+  const p = PALS.find(p => p[0] === id) || PALS[0];
+  const out = d3.range(n).map(i => d3.color(p[2](p[3] + (p[4]-p[3]) * (n === 1 ? .5 : i/(n-1)))).formatHex());
+  return rev ? out.reverse() : out;
+}
+
+/* ---------- ตัวช่วย ---------- */
+function fillSelect(sel, items, pref, keepCur = true){
+  const cur = sel.value;
+  sel.innerHTML = items.map(([v,t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('');
+  const vals = items.map(i => i[0]);
+  sel.value = keepCur && vals.includes(cur) ? cur : (pref !== undefined && vals.includes(pref) ? pref : (vals[0] ?? ''));
+}
+function cellStr(v){
+  if (v == null) return '';
+  if (v instanceof Date) return v.toISOString().slice(0,10);
+  return String(v).trim();
+}
+function fmtCell(v){
+  if (v == null) return '';
+  if (v instanceof Date) return v.toLocaleDateString('th-TH');
+  if (typeof v === 'number') return v.toLocaleString('th-TH', {maximumFractionDigits:4});
+  return String(v);
+}
+function norm(v){
+  let s = cellStr(v).toUpperCase().replace(/\s+/g,' ');
+  if ($('chkZeros').checked && /^\d+$/.test(s)) s = s.replace(/^0+(?=\d)/,'');
+  return s;
+}
+function parseNum(v){
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  if (typeof v !== 'string') return null;
+  const s = v.replace(/[,\s%฿]/g,'');
+  if (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(s)) return null;
+  return +s;
+}
+const HEX = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
+function hexNorm(v){ const s = String(v).trim(); if (!HEX.test(s)) return null; return d3.color(s.startsWith('#') ? s : '#'+s).formatHex(); }
+function fmtVal(v){
+  if (typeof v !== 'number') return String(v);
+  switch ($('selFmt').value){
+    case 'd0': return d3.format(',.0f')(v);
+    case 'd1': return d3.format(',.1f')(v);
+    case 'd2': return d3.format(',.2f')(v);
+    case 'pctv': return d3.format(',.1f')(v) + '%';
+    case 'pct01': return d3.format('.1%')(v);
+    default: return d3.format(',.2~f')(v);
+  }
+}
+function numRatio(col){
+  let n = 0, k = 0;
+  for (const r of S.rows){ const v = r[col]; if (v == null || v === '') continue; n++; if (parseNum(v) != null) k++; }
+  return n ? k/n : 0;
+}
+function firstNonNull(rows, col){ for (const r of rows){ const v = r[col]; if (v != null && v !== '') return v; } return null; }
+
+/* Jenks natural breaks — คืนค่าจุดแบ่ง (ค่าแรกของแต่ละกลุ่ม ยกเว้นกลุ่มแรก) */
+function jenks(data, n){
+  let d = data;
+  if (d.length > 4000){ const step = d.length/4000; d = d3.range(4000).map(i => data[Math.floor(i*step)]); }
+  const m = d.length;
+  const lower = Array.from({length:m+1}, () => new Array(n+1).fill(0));
+  const vari  = Array.from({length:m+1}, () => new Array(n+1).fill(0));
+  for (let j = 1; j <= n; j++){ lower[1][j] = 1; for (let i = 2; i <= m; i++) vari[i][j] = Infinity; }
+  for (let l = 2; l <= m; l++){
+    let s1 = 0, s2 = 0, w = 0, v = 0;
+    for (let k = 1; k <= l; k++){
+      const i3 = l - k + 1, val = d[i3-1];
+      s2 += val*val; s1 += val; w++;
+      v = s2 - s1*s1/w;
+      const i4 = i3 - 1;
+      if (i4 !== 0) for (let j = 2; j <= n; j++){
+        if (vari[l][j] >= v + vari[i4][j-1]){ lower[l][j] = i3; vari[l][j] = v + vari[i4][j-1]; }
+      }
+    }
+    lower[l][1] = 1; vari[l][1] = v;
+  }
+  const br = []; let k = m;
+  for (let j = n; j >= 2; j--){ const id = lower[k][j]; br.unshift(d[id-1]); k = id - 1; }
+  return br;
+}
+
+/* ---------- แผนที่ (SVG + zoom) ---------- */
+const svg = d3.select('#map');
+const gRoot = svg.append('g');
+const gShapes = gRoot.append('g');
+const gLabels = gRoot.append('g');
+let path = d3.geoPath(), curK = 1;
+const zoom = d3.zoom().scaleExtent([0.5, 400]).on('zoom', e => {
+  gRoot.attr('transform', e.transform); curK = e.transform.k;
+  gLabels.selectAll('text').attr('font-size', 11/curK).attr('stroke-width', 3/curK);
+  hideTip();
+});
+svg.call(zoom).on('dblclick.zoom', null);
+
+const mercY = lat => { const l = Math.max(-85, Math.min(85, lat)); return Math.log(Math.tan(Math.PI/4 + l*Math.PI/360)) * 180/Math.PI; };
+function eachCoord(g, fn){
+  if (!g) return; const t = g.type, c = g.coordinates;
+  if (t === 'Point') fn(c);
+  else if (t === 'MultiPoint' || t === 'LineString') c.forEach(fn);
+  else if (t === 'MultiLineString' || t === 'Polygon') c.forEach(r => r.forEach(fn));
+  else if (t === 'MultiPolygon') c.forEach(p => p.forEach(r => r.forEach(fn)));
+  else if (t === 'GeometryCollection') g.geometries.forEach(x => eachCoord(x, fn));
+}
+function mapGeom(g, fn){
+  const t = g.type, c = g.coordinates;
+  if (t === 'GeometryCollection') return {type:t, geometries:g.geometries.map(x => mapGeom(x, fn))};
+  const m = t === 'Point' ? fn(c)
+    : (t === 'MultiPoint' || t === 'LineString') ? c.map(fn)
+    : (t === 'MultiLineString' || t === 'Polygon') ? c.map(r => r.map(fn))
+    : c.map(p => p.map(r => r.map(fn)));
+  return {type:t, coordinates:m};
+}
+const countGeoms = o => o.type === 'GeometryCollection' ? (o.geometries || []).length : 1;
+
+async function loadMapFile(file){
+  try {
+    const obj = JSON.parse(await file.text());
+    S.mapName = file.name;
+    loadMapObject(obj);
+  } catch (e){ alert('อ่านไฟล์แผนที่ไม่ได้: ' + e.message); }
+}
+function loadMapObject(obj){
+  if (obj.type === 'Topology'){
+    S.topo = obj;
+    const names = Object.keys(obj.objects || {});
+    if (!names.length) throw new Error('ไม่พบเลเยอร์ใน TopoJSON');
+    const best = names.slice().sort((a,b) => countGeoms(obj.objects[b]) - countGeoms(obj.objects[a]))[0];
+    fillSelect($('selObj'), names.map(n => [n, `${n} (${countGeoms(obj.objects[n])} รายการ)`]), best, false);
+    $('objRow').hidden = names.length < 2;
+    useTopoObject(best);
+  } else if (obj.type === 'FeatureCollection' || obj.type === 'Feature'){
+    S.topo = null; $('objRow').hidden = true;
+    setGeo(obj.type === 'Feature' ? {type:'FeatureCollection', features:[obj]} : obj);
+  } else throw new Error('ไฟล์นี้ไม่ใช่ TopoJSON หรือ GeoJSON');
+}
+function useTopoObject(name){
+  let fc = topojson.feature(S.topo, S.topo.objects[name]);
+  if (fc.type !== 'FeatureCollection') fc = {type:'FeatureCollection', features:[fc]};
+  setGeo(fc);
+}
+function setGeo(fc){
+  const feats = (fc.features || []).filter(f => f && f.geometry);
+  if (!feats.length){ alert('ไม่พบรูปพื้นที่ในไฟล์'); return; }
+  const b = [Infinity, Infinity, -Infinity, -Infinity];
+  feats.forEach(f => eachCoord(f.geometry, c => { if (c[0]<b[0]) b[0]=c[0]; if (c[1]<b[1]) b[1]=c[1]; if (c[0]>b[2]) b[2]=c[0]; if (c[1]>b[3]) b[3]=c[1]; }));
+  const geographic = b[0] >= -180 && b[2] <= 180 && b[1] >= -90 && b[3] <= 90;
+  const tf = geographic ? c => [c[0], mercY(c[1])] : c => [c[0], c[1]];
+  S.geo = {type:'FeatureCollection', features: feats.map((f,i) => ({type:'Feature', id:i, properties:f.properties || {}, geometry:mapGeom(f.geometry, tf)}))};
+  const fs = new Set(); S.geo.features.forEach(f => Object.keys(f.properties).forEach(k => fs.add(k)));
+  S.geoFields = [...fs];
+  $('mapInfo').textContent = `${S.mapName || 'แผนที่'} · ${feats.length.toLocaleString()} พื้นที่ · พิกัด${geographic ? 'ภูมิศาสตร์ (lat/lon)' : 'ฉาก (เช่น UTM)'}`;
+  $('dropMap').classList.add('ok');
+  refreshFieldSelects();
+  if (S.rows.length) autoMatch(); else guessMapKey();
+  drawMap();
+  update();
+}
+function guessMapKey(){
+  const f = S.geoFields.find(f => /dma|dmz|code|รหัส/i.test(f)) || S.geoFields.find(f => /id|name|ชื่อ/i.test(f));
+  if (f) $('selMapKey').value = f;
+}
+function drawMap(){
+  if (!S.geo) return;
+  const el = $('mapWrap'), W = el.clientWidth, H = el.clientHeight;
+  svg.attr('viewBox', `0 0 ${W} ${H}`).attr('width', W).attr('height', H);
+  const proj = d3.geoIdentity().reflectY(true).fitExtent([[30,30],[W-30,H-30]], S.geo);
+  path = d3.geoPath(proj);
+  gShapes.selectAll('path').data(S.geo.features, d => d.id).join('path')
+    .attr('d', path).attr('vector-effect', 'non-scaling-stroke').attr('stroke-linejoin', 'round')
+    .on('mousemove', showTip).on('mouseleave', leaveShape).on('dblclick', (e,d) => zoomTo(d));
+  S.geo.features.forEach(d => { d.__c = path.centroid(d); });
+  svg.call(zoom.transform, d3.zoomIdentity);
+  $('empty').hidden = true;
+  styleShapes();
+}
+
+/* ---------- Excel ---------- */
+async function loadDataFile(file){
+  try {
+    const buf = await file.arrayBuffer();
+    S.wb = XLSX.read(buf, {type:'array', cellDates:true});
+    S.dataName = file.name;
+    fillSelect($('selSheet'), S.wb.SheetNames.map(n => [n,n]), S.wb.SheetNames[0], false);
+    useSheet(true);
+  } catch (e){ alert('อ่านไฟล์ Excel ไม่ได้: ' + e.message); }
+}
+function useSheet(fresh){
+  if (!S.wb) return;
+  const ws = S.wb.Sheets[$('selSheet').value];
+  const hr = Math.max(1, Math.round(+$('hdrRow').value || 1));
+  const aoa = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, blankrows:true, raw:true});
+  const hdr = aoa[hr-1] || [];
+  let width = hdr.length; for (let i = hr; i < aoa.length; i++) if (aoa[i] && aoa[i].length > width) width = aoa[i].length;
+  const seen = {}, cols = [];
+  for (let i = 0; i < width; i++){
+    let h = hdr[i] == null || String(hdr[i]).trim() === '' ? `คอลัมน์ ${XLSX.utils.encode_col(i)}` : String(hdr[i]).trim();
+    if (seen[h]) h = `${h} (${++seen[h]})`; else seen[h] = 1;
+    cols.push(h);
+  }
+  S.cols = cols;
+  S.allRows = aoa.slice(hr).filter(r => r && r.some(v => v !== null && v !== '')).map(r => {
+    const o = {}; cols.forEach((c,i) => o[c] = r[i] === undefined ? null : r[i]); return o;
+  });
+  $('dataInfo').textContent = `${S.dataName || 'ข้อมูล'} · ${S.allRows.length.toLocaleString()} แถว · ${cols.length} คอลัมน์`;
+  $('dropData').classList.add('ok');
+  fillSelect($('selFilterCol'), [['','— ไม่กรอง —'], ...cols.map(c => [c,c])], '');
+  applyFilterCol();
+  refreshFieldSelects();
+  if (fresh){ if (S.geo) autoMatch(); guessValue(true); }
+  update();
+}
+function applyFilterCol(){
+  const fc = $('selFilterCol').value;
+  if (!fc){ $('filterValRow').hidden = true; S.rows = S.allRows; return; }
+  const vals = [...new Set(S.allRows.map(r => cellStr(r[fc])))].sort((a,b) => a.localeCompare(b, 'th', {numeric:true}));
+  fillSelect($('selFilterVal'), vals.map(v => [v, v === '' ? '(ว่าง)' : v]), vals[vals.length-1]);
+  $('filterValRow').hidden = false;
+  filterRows();
+}
+function filterRows(){
+  const fc = $('selFilterCol').value, fv = $('selFilterVal').value;
+  S.rows = fc ? S.allRows.filter(r => cellStr(r[fc]) === fv) : S.allRows;
+}
+function refreshFieldSelects(){
+  fillSelect($('selMapKey'), S.geoFields.map(f => [f,f]));
+  fillSelect($('selDataKey'), S.cols.map(c => [c,c]));
+  fillSelect($('selValue'), S.cols.map(c => [c,c]));
+  fillSelect($('selLabel'), [['','— ไม่แสดง —'], ...S.geoFields.map(f => ['m:'+f, 'แผนที่: '+f]), ...S.cols.map(c => ['d:'+c, 'Excel: '+c])], '');
+}
+function autoMatch(){
+  if (!S.geo || !S.cols.length) return;
+  const z = $('chkZeros'), was = z.checked;
+  z.checked = false; const a = scoreMatch();
+  z.checked = true;  const b = scoreMatch();
+  const best = b.score > a.score ? b : a;
+  z.checked = best.score ? b.score > a.score : was;
+  if (best.score > 0){ $('selMapKey').value = best.f; $('selDataKey').value = best.c; }
+}
+function scoreMatch(){
+  const fields = S.geoFields.slice(0, 80), cols = S.cols.slice(0, 120);
+  const geoSets = fields.map(f => new Set(S.geo.features.map(x => norm(x.properties[f])).filter(Boolean)));
+  const colKeys = cols.map(c => [...new Set(S.allRows.map(r => norm(r[c])).filter(Boolean))]);
+  let best = {score:0};
+  fields.forEach((f,i) => cols.forEach((c,j) => {
+    let n = 0; for (const k of colKeys[j]) if (geoSets[i].has(k)) n++;
+    if (n > best.score) best = {score:n, f, c};
+  }));
+  return best;
+}
+function guessValue(force){
+  const sel = $('selValue'), dk = $('selDataKey').value;
+  if (!force && sel.value && sel.value !== dk) return;
+  const cand = S.cols.filter(c => c !== dk);
+  const nums = cand.filter(c => numRatio(c) >= .8);
+  const pick = nums.find(c => /สูญเสีย|loss|nrw|ร้อยละ|%/i.test(c)) || nums[0] || cand[0];
+  if (pick) sel.value = pick;
+}
+
+/* ---------- จับคู่ + จัดกลุ่มสี ---------- */
+function buildIndex(){
+  S.idx = new Map(); S.dups = 0; S.unmatchedData = [];
+  const dk = $('selDataKey').value, mk = $('selMapKey').value;
+  if (dk) for (const r of S.rows){
+    const k = norm(r[dk]); if (!k) continue;
+    const e = S.idx.get(k); if (e){ e.push(r); S.dups++; } else S.idx.set(k, [r]);
+  }
+  const mapKeys = new Set();
+  S.geo.features.forEach(f => { const k = norm(f.properties[mk]); f.__k = k; if (k) mapKeys.add(k); f.__rows = (k && S.idx.get(k)) || null; });
+  S.unmatchedData = [...S.idx.keys()].filter(k => !mapKeys.has(k));
+}
+function classify(){
+  const vc = $('selValue').value, feats = S.geo.features;
+  if (!vc || !S.rows.length){ $('numOpts').hidden = false; return null; }
+  const raws = feats.filter(f => f.__rows).map(f => firstNonNull(f.__rows, vc)).filter(v => v != null);
+  let mode = $('selMode').value;
+  if (mode === 'auto'){
+    const hex = raws.filter(v => typeof v === 'string' && /^#/.test(v.trim()) && HEX.test(v.trim())).length;
+    const num = raws.filter(v => parseNum(v) != null).length;
+    mode = raws.length && hex/raws.length >= .8 ? 'hex' : (!raws.length || num/raws.length >= .8 ? 'num' : 'cat');
+  }
+  $('numOpts').hidden = mode !== 'num';
+  const method = $('selMethod').value;
+  $('brRow').hidden = method !== 'manual'; $('nRow').hidden = method === 'manual';
+
+  const agg = $('selAgg').value;
+  feats.forEach(f => {
+    if (!f.__rows){ f.__v = null; return; }
+    if (mode === 'num'){
+      const nums = f.__rows.map(r => parseNum(r[vc])).filter(v => v != null);
+      f.__v = !nums.length ? null : agg === 'sum' ? d3.sum(nums) : agg === 'mean' ? d3.mean(nums) : agg === 'max' ? d3.max(nums) : nums[0];
+    } else {
+      const v = firstNonNull(f.__rows, vc);
+      f.__v = v == null ? null : mode === 'hex' ? hexNorm(v) : cellStr(v);
+    }
+  });
+
+  const sig = mode === 'num' ? [vc, mode, method, $('nClass').value, $('selPal').value, $('chkRev').checked, $('breaks').value].join('|') : vc + '|' + mode;
+  if (sig !== S.sig){ S.custom = {}; S.sig = sig; }
+
+  let items = [], itemOf = () => null, sub = '', t = null;
+  if (mode === 'num'){
+    const vals = feats.map(f => f.__v).filter(v => v != null).sort(d3.ascending);
+    if (vals.length){
+      const min = vals[0], max = vals[vals.length-1], uniq = [...new Set(vals)];
+      const n = Math.max(2, Math.min(9, Math.round(+$('nClass').value || 5)));
+      if (method === 'manual'){
+        t = [...new Set($('breaks').value.split(/[,;\s]+/).map(parseNum).filter(v => v != null))].sort(d3.ascending);
+      }
+      if (method !== 'manual' || !t.length){
+        if (uniq.length <= n) t = uniq.slice(1);
+        else if (method === 'equal') t = d3.range(1, n).map(i => min + (max-min)*i/n);
+        else if (method === 'jenks') t = jenks(vals, n);
+        else t = d3.range(1, n).map(i => d3.quantileSorted(vals, i/n));
+        t = [...new Set(t)].filter(x => x > min);
+      }
+      const colors = ramp($('selPal').value, t.length + 1, $('chkRev').checked);
+      const counts = new Array(t.length + 1).fill(0);
+      vals.forEach(v => counts[d3.bisectRight(t, v)]++);
+      items = colors.map((c,i) => ({ key:'c'+i, color:S.custom['c'+i] || c, count:counts[i],
+        label: !t.length ? (min === max ? fmtVal(min) : `${fmtVal(min)} – ${fmtVal(max)}`)
+             : i === 0 ? `< ${fmtVal(t[0])}`
+             : i === t.length ? `≥ ${fmtVal(t[i-1])}`
+             : `${fmtVal(t[i-1])} – ${fmtVal(t[i])}` }));
+      itemOf = v => items[d3.bisectRight(t, v)];
+      sub = `ต่ำสุด ${fmtVal(min)} · สูงสุด ${fmtVal(max)}`;
+    } else sub = 'ไม่พบค่าตัวเลขในพื้นที่ที่จับคู่ได้';
+  } else {
+    const cnt = d3.rollup(feats.filter(f => f.__v != null), v => v.length, f => f.__v);
+    const cats = [...cnt.keys()].sort((a,b) => String(a).localeCompare(String(b), 'th', {numeric:true}));
+    const m = new Map();
+    items = cats.map((c,i) => {
+      const key = (mode === 'hex' ? 'h:' : 'v:') + c;
+      const it = {key, color:S.custom[key] || (mode === 'hex' ? c : CAT[i % CAT.length]), label:c, count:cnt.get(c)};
+      m.set(c, it); return it;
+    });
+    itemOf = v => m.get(v);
+    sub = `${cats.length} ${mode === 'hex' ? 'สี' : 'กลุ่ม'}`;
+  }
+  const nd = feats.filter(f => f.__v == null).length;
+  if (nd) items.push({key:'nodata', color:$('noData').value, label:'ไม่มีข้อมูล', count:nd});
+  return {mode, items, itemOf, sub, t};
+}
+function colorOf(d){
+  if (!S.L) return '#cdd5de';
+  if (d.__v == null) return $('noData').value;
+  const it = S.L.itemOf(d.__v);
+  return it ? it.color : $('noData').value;
+}
+function styleShapes(){
+  const op = +$('opacity').value, sw = +$('stroke').value, sc = $('strokeColor').value;
+  gShapes.selectAll('path').attr('fill', colorOf).attr('fill-opacity', op).attr('stroke', sc).attr('stroke-width', sw);
+}
+function update(){
+  if (!S.geo){ if (S.cols.length) $('matchInfo').innerHTML = '<span class="warn">รอไฟล์แผนที่</span>'; return; }
+  buildIndex();
+  S.L = classify();
+  styleShapes();
+  drawLabels();
+  drawLegend();
+  updateMatchInfo();
+  updateSearchList();
+}
+
+/* ---------- ป้ายชื่อ / คำอธิบาย / สถานะ ---------- */
+function labelOf(d, lf){
+  if (lf.startsWith('m:')) return cellStr(d.properties[lf.slice(2)]);
+  return d.__rows ? cellStr(d.__rows[0][lf.slice(2)]) : '';
+}
+function drawLabels(){
+  if (!S.geo) return;
+  const lf = $('selLabel').value, showVal = $('chkLabelVal').checked;
+  const data = (lf || showVal) ? S.geo.features.filter(f => f.__c && isFinite(f.__c[0])) : [];
+  gLabels.selectAll('text').data(data, d => d.id).join('text')
+    .attr('x', d => d.__c[0]).attr('y', d => d.__c[1])
+    .attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
+    .attr('font-family', 'Sarabun, Tahoma, sans-serif').attr('font-size', 11/curK)
+    .attr('fill', '#1f2933').attr('stroke', '#ffffff').attr('stroke-width', 3/curK)
+    .attr('stroke-linejoin', 'round').attr('paint-order', 'stroke').attr('pointer-events', 'none')
+    .text(d => [lf ? labelOf(d, lf) : '', showVal && d.__v != null ? fmtVal(d.__v) : ''].filter(Boolean).join(' · '));
+}
+function legendTitle(){ return $('title').value.trim() || $('selValue').value; }
+function drawLegend(){
+  const el = $('legend');
+  if (!S.L || !S.L.items.length){ el.hidden = true; return; }
+  el.innerHTML = `<div class="lg-title">${esc(legendTitle())}</div>${S.L.sub ? `<div class="lg-sub">${esc(S.L.sub)}</div>` : ''}`
+    + S.L.items.map((it,i) => `<label class="lg-item"><input type="color" value="${it.color}" data-i="${i}"><span class="lg-sw" style="background:${it.color}"></span><span>${esc(it.label)}</span><span class="lg-n">${it.count}</span></label>`).join('')
+    + '<div class="lg-hint">คลิกช่องสีเพื่อเปลี่ยนสี</div>';
+  el.hidden = false;
+  el.querySelectorAll('input[type=color]').forEach(inp => inp.addEventListener('input', () => {
+    const it = S.L.items[+inp.dataset.i];
+    it.color = inp.value;
+    if (it.key === 'nodata') $('noData').value = inp.value; else S.custom[it.key] = inp.value;
+    inp.nextElementSibling.style.background = inp.value;
+    styleShapes();
+  }));
+}
+function updateMatchInfo(){
+  const el = $('matchInfo');
+  if (!S.rows.length){ el.innerHTML = S.cols.length ? '<span class="warn">ไม่มีแถวข้อมูล (ตรวจตัวกรอง/แถวหัวตาราง)</span>' : ''; return; }
+  const total = S.geo.features.length, matched = S.geo.features.filter(f => f.__rows).length;
+  const miss = S.geo.features.filter(f => !f.__rows).map(f => f.__k || '(ไม่มีรหัส)');
+  const pct = total ? Math.round(matched/total*100) : 0;
+  let h = `<div class="${pct >= 90 ? 'ok' : 'warn'}">จับคู่ได้ <b>${matched.toLocaleString()}</b> จาก ${total.toLocaleString()} พื้นที่ (${pct}%)</div>`;
+  if (miss.length) h += `<details><summary>พื้นที่ในแผนที่ที่ไม่มีข้อมูล (${miss.length})</summary><div>${miss.slice(0,300).map(esc).join(', ')}</div></details>`;
+  if (S.unmatchedData.length) h += `<details><summary>รหัสใน Excel ที่ไม่พบในแผนที่ (${S.unmatchedData.length})</summary><div>${S.unmatchedData.slice(0,300).map(esc).join(', ')}</div></details>`;
+  if (S.dups) h += `<div class="warn">มีรหัสซ้ำใน Excel ${S.dups} แถว — ตั้งค่า “ถ้ารหัสซ้ำ” หรือใช้ตัวกรองแถว</div>`;
+  el.innerHTML = h;
+}
+function updateSearchList(){
+  const mk = $('selMapKey').value;
+  const vals = [...new Set(S.geo.features.map(f => cellStr(f.properties[mk])).filter(Boolean))].sort((a,b) => a.localeCompare(b,'th',{numeric:true})).slice(0, 5000);
+  $('keys').innerHTML = vals.map(v => `<option value="${esc(v)}">`).join('');
+}
+
+/* ---------- tooltip / ซูม ---------- */
+function showTip(e, d){
+  const mk = $('selMapKey').value, vc = $('selValue').value, tip = $('tip');
+  d3.select(e.currentTarget).attr('stroke', '#1f2933').attr('stroke-width', +$('stroke').value + 1.5).raise();
+  let h = `<div class="t-head">${esc(cellStr(d.properties[mk]) || '(ไม่มีรหัส)')}</div>`;
+  if (S.L && vc){
+    h += `<div class="t-val"><span class="sw" style="background:${colorOf(d)}"></span>${esc(vc)}: <b>${d.__v == null ? 'ไม่มีข้อมูล' : esc(fmtVal(d.__v))}</b>${d.__rows && d.__rows.length > 1 ? `<small>(${d.__rows.length} แถว)</small>` : ''}</div>`;
+  }
+  const row = d.__rows && d.__rows[0];
+  if (row){
+    h += '<table>' + S.cols.filter(c => c !== vc).slice(0, 14).map(c => `<tr><th>${esc(c)}</th><td>${esc(fmtCell(row[c]))}</td></tr>`).join('') + '</table>';
+  } else {
+    if (S.rows.length) h += '<div class="t-miss">ไม่พบรหัสนี้ใน Excel</div>';
+    h += '<table>' + Object.keys(d.properties).slice(0, 10).map(k => `<tr><th>${esc(k)}</th><td>${esc(fmtCell(d.properties[k]))}</td></tr>`).join('') + '</table>';
+  }
+  tip.innerHTML = h; tip.hidden = false;
+  const r = $('mapWrap').getBoundingClientRect();
+  let x = e.clientX - r.left + 14, y = e.clientY - r.top + 14;
+  if (x + tip.offsetWidth > r.width - 8) x = e.clientX - r.left - tip.offsetWidth - 14;
+  if (y + tip.offsetHeight > r.height - 8) y = Math.max(8, e.clientY - r.top - tip.offsetHeight - 14);
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+function leaveShape(e){
+  d3.select(e.currentTarget).attr('stroke', $('strokeColor').value).attr('stroke-width', +$('stroke').value);
+  hideTip();
+}
+function hideTip(){ $('tip').hidden = true; }
+function zoomTo(d){
+  const [[x0,y0],[x1,y1]] = path.bounds(d);
+  const W = +svg.attr('width'), H = +svg.attr('height');
+  const k = Math.min(200, 0.75 / Math.max((x1-x0)/W, (y1-y0)/H, 1e-6));
+  svg.transition().duration(650).call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(k).translate(-(x0+x1)/2, -(y0+y1)/2));
+  const sel = gShapes.selectAll('path').filter(p => p === d).raise();
+  sel.transition().delay(650).duration(250).attr('stroke', '#111').attr('stroke-width', 4)
+     .transition().delay(900).duration(400).attr('stroke', $('strokeColor').value).attr('stroke-width', +$('stroke').value);
+}
+function doSearch(){
+  if (!S.geo) return;
+  const q = norm($('search').value); if (!q) return;
+  const mk = $('selMapKey').value;
+  const f = S.geo.features.find(f => norm(f.properties[mk]) === q) || S.geo.features.find(f => norm(f.properties[mk]).includes(q));
+  if (f) zoomTo(f); else alert('ไม่พบรหัสพื้นที่: ' + $('search').value);
+}
+
+/* ---------- ส่งออก ---------- */
+function download(blob, name){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function baseName(){ return (S.dataName || S.mapName || 'map').replace(/\.[^.]+$/, '') + (S.L ? '_' + $('selValue').value : ''); }
+function buildSVG(){
+  const NS = 'http://www.w3.org/2000/svg', W = +svg.attr('width'), H = +svg.attr('height');
+  const node = svg.node().cloneNode(true);
+  node.setAttribute('xmlns', NS);
+  let outW = W, outH = H;
+  const mk = (tag, attrs, txt) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (txt != null) e.textContent = txt; return e; };
+  node.insertBefore(mk('rect', {x:0, y:0, width:W, height:H, fill:'#ffffff'}), node.firstChild);
+  if (S.L && S.L.items.length){
+    const font = 'Sarabun, Tahoma, sans-serif';
+    const ctx = document.createElement('canvas').getContext('2d'); ctx.font = `13px ${font}`;
+    const title = legendTitle(), items = S.L.items, lh = 20, pad = 12;
+    const wText = Math.max(ctx.measureText(title).width + 10, ...items.map(it => ctx.measureText(it.label + '   ' + it.count).width + 34), S.L.sub ? ctx.measureText(S.L.sub).width : 0);
+    const bw = Math.ceil(wText + pad*2), bh = pad*2 + 20 + (S.L.sub ? 16 : 0) + items.length*lh;
+    const x = W + 4, y = 30;
+    const W2 = W + bw + 24, H2 = Math.max(H, bh + 46);
+    node.setAttribute('width', W2); node.setAttribute('height', H2); node.setAttribute('viewBox', `0 0 ${W2} ${H2}`);
+    node.firstChild.setAttribute('width', W2); node.firstChild.setAttribute('height', H2);
+    outW = W2; outH = H2;
+    const g = mk('g', {transform:`translate(${x},${y})`, 'font-family':font});
+    g.appendChild(mk('rect', {width:bw, height:bh, rx:6, fill:'#ffffff', 'fill-opacity':.95, stroke:'#d0d6dc'}));
+    g.appendChild(mk('text', {x:pad, y:pad+13, 'font-size':14, 'font-weight':600, fill:'#1f2933'}, title));
+    let yy = pad + 22;
+    if (S.L.sub){ g.appendChild(mk('text', {x:pad, y:yy+10, 'font-size':11, fill:'#66727f'}, S.L.sub)); yy += 16; }
+    items.forEach((it,i) => {
+      const ty = yy + i*lh;
+      g.appendChild(mk('rect', {x:pad, y:ty+2, width:20, height:14, rx:2, fill:it.color, stroke:'rgba(0,0,0,.2)'}));
+      g.appendChild(mk('text', {x:pad+28, y:ty+13, 'font-size':13, fill:'#1f2933'}, it.label));
+      g.appendChild(mk('text', {x:bw-pad, y:ty+13, 'font-size':12, fill:'#66727f', 'text-anchor':'end'}, it.count));
+    });
+    node.appendChild(g);
+  }
+  return {str:new XMLSerializer().serializeToString(node), W:outW, H:outH};
+}
+function exportSVG(){ if (!S.geo) return alert('ยังไม่มีแผนที่'); download(new Blob([buildSVG().str], {type:'image/svg+xml'}), baseName() + '.svg'); }
+function exportPNG(){
+  if (!S.geo) return alert('ยังไม่มีแผนที่');
+  const {str, W, H} = buildSVG(), img = new Image();
+  img.onload = () => {
+    const c = document.createElement('canvas'); c.width = W*2; c.height = H*2;
+    const ctx = c.getContext('2d'); ctx.scale(2, 2); ctx.drawImage(img, 0, 0, W, H);
+    c.toBlob(b => download(b, baseName() + '.png'), 'image/png');
+  };
+  img.onerror = () => alert('สร้างภาพไม่สำเร็จ');
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(str);
+}
+function exportCSV(){
+  if (!S.geo) return alert('ยังไม่มีแผนที่');
+  const mk = $('selMapKey').value, vc = $('selValue').value;
+  const q = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s; };
+  const lines = [[mk, 'ผลการจับคู่', vc || 'ค่า', 'กลุ่มสี', 'สี'].map(q).join(',')];
+  S.geo.features.forEach(f => {
+    const it = S.L && f.__v != null ? S.L.itemOf(f.__v) : null;
+    lines.push([cellStr(f.properties[mk]), f.__rows ? 'จับคู่ได้' : 'ไม่พบใน Excel', f.__v ?? '', it ? it.label : 'ไม่มีข้อมูล', colorOf(f)].map(q).join(','));
+  });
+  S.unmatchedData.forEach(k => lines.push([k, 'ไม่พบในแผนที่', '', '', ''].map(q).join(',')));
+  download(new Blob(['\ufeff' + lines.join('\r\n')], {type:'text/csv;charset=utf-8'}), baseName() + '_join.csv');
+}
+
+/* ---------- ข้อมูลตัวอย่าง ---------- */
+function demo(){
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const R = 5, C = 6, lon0 = 100.45, lat0 = 13.66, dx = 0.045, dy = 0.04, P = [];
+  for (let r = 0; r <= R; r++){ P[r] = []; for (let c = 0; c <= C; c++){
+    const edge = r === 0 || r === R || c === 0 || c === C;
+    P[r][c] = [lon0 + c*dx + (edge ? 0 : (rnd()-.5)*dx*.5), lat0 + r*dy + (edge ? 0 : (rnd()-.5)*dy*.5)];
+  }}
+  const features = []; let id = 0;
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++){
+    id++;
+    features.push({type:'Feature', properties:{DMA_CODE:'DMA-' + String(id).padStart(2,'0'), DMA_NAME:'พื้นที่ ' + id},
+      geometry:{type:'Polygon', coordinates:[[P[r][c], P[r][c+1], P[r+1][c+1], P[r+1][c], P[r][c]]]}});
+  }
+  const rows = [];
+  for (let i = 1; i <= 30; i++){
+    if (i === 29) continue;
+    const loss = +(8 + rnd()*37).toFixed(1);
+    rows.push({'รหัส DMA':'DMA-' + String(i).padStart(2,'0'), 'ชื่อพื้นที่':'พื้นที่ ' + i,
+      'น้ำจ่าย (ลบ.ม.)':Math.round(40000 + rnd()*90000), 'น้ำสูญเสีย (%)':loss,
+      'ระดับ':loss >= 30 ? 'วิกฤต' : loss >= 20 ? 'เฝ้าระวัง' : 'ปกติ'});
+  }
+  rows.push({'รหัส DMA':'DMA-99', 'ชื่อพื้นที่':'ไม่มีในแผนที่', 'น้ำจ่าย (ลบ.ม.)':50000, 'น้ำสูญเสีย (%)':22, 'ระดับ':'เฝ้าระวัง'});
+  S.mapName = 'ตัวอย่าง (GeoJSON)';
+  loadMapObject({type:'FeatureCollection', features});
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'ข้อมูล');
+  S.wb = wb; S.dataName = 'ตัวอย่าง.xlsx';
+  fillSelect($('selSheet'), [['ข้อมูล','ข้อมูล']], 'ข้อมูล', false);
+  $('hdrRow').value = 1;
+  useSheet(true);
+}
+
+/* ---------- เหตุการณ์ ---------- */
+fillSelect($('selPal'), PALS.map(p => [p[0], p[1]]), 'GnYlRd', false);
+$('fMap').addEventListener('change', e => { if (e.target.files[0]) loadMapFile(e.target.files[0]); e.target.value = ''; });
+$('fData').addEventListener('change', e => { if (e.target.files[0]) loadDataFile(e.target.files[0]); e.target.value = ''; });
+$('selObj').addEventListener('change', e => useTopoObject(e.target.value));
+$('selSheet').addEventListener('change', () => useSheet(true));
+$('hdrRow').addEventListener('change', () => useSheet(true));
+$('selFilterCol').addEventListener('change', () => { applyFilterCol(); update(); });
+$('selFilterVal').addEventListener('change', () => { filterRows(); update(); });
+['selMapKey','selDataKey','chkZeros','selValue','selMode','selPal','chkRev','selFmt','selAgg','noData','nClass','breaks']
+  .forEach(id => $(id).addEventListener(id === 'breaks' || id === 'nClass' ? 'input' : 'change', update));
+$('selMethod').addEventListener('change', () => {
+  if ($('selMethod').value === 'manual' && !$('breaks').value.trim() && S.L && S.L.t && S.L.t.length)
+    $('breaks').value = S.L.t.map(v => +v.toPrecision(4)).join(', ');
+  update();
+});
+$('btnAuto').addEventListener('click', () => { autoMatch(); guessValue(false); update(); });
+['selLabel','chkLabelVal'].forEach(id => $(id).addEventListener('change', drawLabels));
+['opacity','stroke','strokeColor'].forEach(id => $(id).addEventListener('input', styleShapes));
+$('title').addEventListener('input', drawLegend);
+$('btnPng').addEventListener('click', exportPNG);
+$('btnSvg').addEventListener('click', exportSVG);
+$('btnCsv').addEventListener('click', exportCSV);
+$('btnFit').addEventListener('click', () => svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity));
+$('search').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+$('search').addEventListener('change', doSearch);
+$('demo').addEventListener('click', e => { e.preventDefault(); demo(); });
+
+let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (S.geo){ drawMap(); drawLabels(); } }, 200); });
+
+let dragDepth = 0;
+window.addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; $('dropOverlay').hidden = false; });
+window.addEventListener('dragleave', e => { e.preventDefault(); if (--dragDepth <= 0){ dragDepth = 0; $('dropOverlay').hidden = true; } });
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => {
+  e.preventDefault(); dragDepth = 0; $('dropOverlay').hidden = true;
+  const files = [...e.dataTransfer.files];
+  const mapF = files.find(f => /\.(topo)?json$|\.geojson$/i.test(f.name));
+  const dataF = files.find(f => /\.(xlsx|xls|xlsm|csv)$/i.test(f.name));
+  (async () => { if (mapF) await loadMapFile(mapF); if (dataF) await loadDataFile(dataF); })();
+});
+</script>
+</body>
+</html>
