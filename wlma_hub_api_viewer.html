@@ -5,11 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WLMA Hub API Viewer</title>
 <!--
-  ตัวอย่างหน้าเว็บอ่าน webservice ของ WLMA Data Hub แล้วแสดงเป็นตาราง
-  - ไฟล์เดียว ไม่พึ่ง CDN (ใช้ใน intranet ได้)
-  - ถ้าเปิดจากเครื่องอื่น / คนละ origin กับ hub (port 8080) ต้องเปิด CORS ที่ FastAPI
-    หรือวางไฟล์นี้ใน static ของ hub เอง (แนะนำ) แล้วเปิดผ่าน http://<hub>:8080/...
-  - path / พารามิเตอร์ / header ของ API แก้ได้บนหน้าเว็บ ให้ตรงกับของจริง
+  ตัวอย่างหน้าเว็บอ่าน API ของ WLMA Data Hub (/api/v1) แล้วแสดงเป็นตาราง
+  วางไว้ที่ C:\apps\WLMA_DATA_HUB\web\static\  แล้วเปิด  http://<hub>:8080/static/wlma_hub_api_viewer.html
+  (origin เดียวกับ API จึงไม่ติด CORS — ไม่ต้องแก้ app.py / ไม่ต้องรีสตาร์ท)
+  พารามิเตอร์ตรงกับ web/api_v1.py เวอร์ชัน 1.1 ; header = X-API-Key
 -->
 <style>
 :root{
@@ -27,17 +26,23 @@
     --bad-bg:#3d1a17; --bad:#f4a39b; --gray-bg:#262e37; --gray:#a7b1bb; --code:#232c36;
   }
 }
+@font-face{font-family:"IBM Plex Sans Thai";font-weight:400;src:url(fonts/ibm-plex-sans-thai-thai-400-normal.woff2) format("woff2");unicode-range:U+0E01-0E5B}
+@font-face{font-family:"IBM Plex Sans Thai";font-weight:600;src:url(fonts/ibm-plex-sans-thai-thai-600-normal.woff2) format("woff2");unicode-range:U+0E01-0E5B}
+@font-face{font-family:"IBM Plex Sans Thai";font-weight:400;src:url(fonts/ibm-plex-sans-thai-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Sans Thai";font-weight:600;src:url(fonts/ibm-plex-sans-thai-latin-600-normal.woff2) format("woff2")}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
-  font-family:"Sarabun","Noto Sans Thai","Leelawadee UI","Tahoma",system-ui,sans-serif;font-size:14px}
+  font-family:"IBM Plex Sans Thai","Sarabun","Leelawadee UI","Tahoma",system-ui,sans-serif;font-size:14px}
 header{padding:14px 20px;border-bottom:1px solid var(--line);background:var(--card);
   display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 header h1{font-size:18px;margin:0;font-weight:600}
-header .sub{color:var(--muted);font-size:13px}
+header .sub{color:var(--muted);font-size:13px;flex:1}
+header a{color:var(--accent);font-size:13px}
 main{padding:16px 20px;max-width:1500px;margin:0 auto}
 .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:14px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
 label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+label small{color:var(--muted);font-size:11px}
 input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);
   border-radius:6px;padding:6px 8px;min-width:120px}
 input[type=checkbox]{min-width:0}
@@ -45,11 +50,12 @@ button{font:inherit;border:1px solid var(--accent);background:var(--accent);colo
   border-radius:6px;padding:7px 14px;cursor:pointer}
 button.ghost{background:transparent;color:var(--accent)}
 button:disabled{opacity:.5;cursor:default}
-.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
 .tabs .grp{font-size:12px;color:var(--muted);align-self:center;margin:0 4px 0 8px}
 .tab{background:transparent;color:var(--ink);border:1px solid var(--line)}
 .tab.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.meta{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:10px 0}
+.hint{font-size:12px;color:var(--muted);margin:6px 0 12px}
+.meta{display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);margin:10px 0}
 .meta code{background:var(--code);padding:2px 6px;border-radius:4px;color:var(--ink);word-break:break-all}
 .msg{padding:10px 12px;border-radius:6px;margin:8px 0;white-space:pre-wrap}
 .msg.err{background:var(--bad-bg);color:var(--bad)}
@@ -76,43 +82,40 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
 <body>
 <header>
   <h1>WLMA Data Hub · ตัวอย่างอ่าน API</h1>
-  <span class="sub">เรียก webservice ของ hub แล้วแสดงเป็นตาราง (เรียง / ค้นหา / ส่งออก CSV)</span>
+  <span class="sub">เรียก /api/v1 ของ hub แล้วแสดงเป็นตาราง (เรียง / ค้นหา / ส่งออก CSV)</span>
+  <a id="docsLink" href="/api/v1/docs" target="_blank" rel="noopener">คู่มือ API (Swagger)</a>
 </header>
 <main>
 
-  <!-- การเชื่อมต่อ -->
   <section class="card">
     <details id="connBox">
-      <summary>การเชื่อมต่อ API (คลิกเพื่อตั้งค่า)</summary>
+      <summary>การเชื่อมต่อ API</summary>
       <div class="row" style="margin-top:10px">
-        <label>Base URL ของ hub<input id="baseUrl" style="min-width:240px" placeholder="http://hub-server:8080"></label>
-        <label>Prefix ของ API<input id="prefix" placeholder="/api/v1"></label>
-        <label>ชื่อ Header ของ key<input id="keyHeader" placeholder="X-API-Key"></label>
-        <label>API key<input id="apiKey" type="password" style="min-width:220px" placeholder="(ถ้ามี)"></label>
+        <label>Base URL ของ hub <small>เว้นว่าง = server ที่เปิดหน้านี้</small><input id="baseUrl" style="min-width:240px" placeholder="http://172.19.32.165:8080"></label>
+        <label>API key (ส่งเป็น header X-API-Key)<input id="apiKey" type="password" style="min-width:260px" placeholder="key จากหน้า การบริการ API"></label>
         <label style="flex-direction:row;align-items:center;gap:6px;color:var(--ink)">
-          <input id="demo" type="checkbox"> โหมดตัวอย่าง (ข้อมูลจำลอง ไม่เรียก server)</label>
-        <button class="ghost" id="saveConn">บันทึกในเครื่องนี้</button>
+          <input id="remember" type="checkbox"> จำ key ในเบราว์เซอร์นี้</label>
+        <label style="flex-direction:row;align-items:center;gap:6px;color:var(--ink)">
+          <input id="demo" type="checkbox"> โหมดตัวอย่าง (ข้อมูลจำลอง)</label>
+        <button class="ghost" id="saveConn">บันทึก</button>
       </div>
     </details>
   </section>
 
-  <!-- เลือก endpoint + พารามิเตอร์ -->
   <section class="card">
     <div class="tabs" id="tabs"></div>
+    <div class="hint" id="hint"></div>
     <div class="row" id="paramRow"></div>
     <div class="row" style="margin-top:10px">
-      <label>Path<input id="path" style="min-width:200px"></label>
-      <label>พารามิเตอร์เพิ่ม (query string)<input id="extra" style="min-width:220px" placeholder="เช่น limit=1000&offset=0"></label>
       <button id="go">ดึงข้อมูล</button>
     </div>
     <div class="meta" id="meta"></div>
     <div id="msg"></div>
   </section>
 
-  <!-- ผลลัพธ์ -->
   <section class="card" id="resultCard" hidden>
     <div class="row" style="justify-content:space-between">
-      <label>ค้นหาในตาราง<input id="q" style="min-width:240px" placeholder="พิมพ์รหัสจุด / ค่า / สถานะ"></label>
+      <label>ค้นหาในตาราง<input id="q" style="min-width:240px" placeholder="พิมพ์เลข DM / ค่า / สถานะ"></label>
       <div class="row">
         <label>แถวต่อหน้า
           <select id="pageSize"><option>25</option><option selected>50</option><option>100</option><option>500</option></select>
@@ -123,58 +126,76 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
     <div class="meta" id="tableMeta"></div>
     <div class="tablewrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
     <div class="pager" id="pager"></div>
+    <div class="pager" id="serverPager"></div>
     <details style="margin-top:12px"><summary>ดู JSON ดิบ</summary><pre id="raw"></pre></details>
   </section>
 </main>
 
 <script>
-/* ======================= ตั้งค่า endpoint =======================
-   path / ชื่อพารามิเตอร์ด้านล่างเป็นค่าตั้งต้น — แก้ให้ตรงกับ API จริงของ hub
-   type: date = ช่องวันที่, text = ช่องข้อความ                         */
-const ld = n => { const d = new Date(Date.now() - n*864e5); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
-const Y = ld(1);   // เมื่อวาน (เวลาเครื่อง)
-const D7 = ld(7);
+/* ======================= endpoint ตาม web/api_v1.py =======================
+   k = ชื่อพารามิเตอร์จริง, t = date | select | number | text, req = บังคับ          */
+const API_PREFIX = '/api/v1';
+const ld = n => { const d = new Date(Date.now() - n*864e5);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+const TODAY = ld(0), Y = ld(1), D7 = ld(7);
+const TYPE_OPTS = ['', 'BOOSTER', 'TRUNK'];
 const PRESETS = [
-  {id:'points', group:'RTU', label:'จุดวัด', path:'points',
-    params:[{k:'branch',l:'สาขา'}]},
-  {id:'rtu', group:'RTU', label:'ข้อมูล 15 นาที', path:'rtu',
-    params:[{k:'point_code',l:'รหัสจุด',v:'DM-01-01-01-01'},{k:'date_from',l:'ตั้งแต่',t:'date',v:Y},{k:'date_to',l:'ถึง',t:'date',v:Y}]},
-  {id:'rtu_hourly', group:'RTU', label:'รายชั่วโมง', path:'rtu/hourly',
-    params:[{k:'point_code',l:'รหัสจุด',v:'DM-01-01-01-01'},{k:'date_from',l:'ตั้งแต่',t:'date',v:Y},{k:'date_to',l:'ถึง',t:'date',v:Y}]},
-  {id:'status_latest', group:'RTU', label:'สถานะล่าสุด', path:'status/latest',
-    params:[{k:'branch',l:'สาขา'}]},
-  {id:'quality_daily', group:'RTU', label:'คุณภาพรายวัน', path:'quality/daily',
-    params:[{k:'date',l:'วันที่',t:'date',v:Y},{k:'branch',l:'สาขา'}]},
-  {id:'stations', group:'RTU', label:'Booster / ท่อประธาน', path:'stations',
-    params:[{k:'station_type',l:'ประเภท'}]},
-  {id:'stations_readings', group:'RTU', label:'ค่าอ่านสถานี', path:'stations/readings',
-    params:[{k:'station_code',l:'รหัสสถานี'},{k:'date_from',l:'ตั้งแต่',t:'date',v:Y},{k:'date_to',l:'ถึง',t:'date',v:Y}]},
+  {id:'points', group:'RTU', label:'จุด DM / ทะเบียน', path:'points',
+    hint:'ทะเบียนจุด DM ปัจจุบัน (ตู้ RTU, มาตร, สัญญา) — กรองตามรหัสสาขาได้',
+    params:[{k:'branch',l:'รหัสสาขา',ph:'เช่น 01'}]},
+  {id:'rtu', group:'RTU', label:'F/P ราย 15 นาที', path:'rtu',
+    hint:'log_dt = เวลาสิ้นสุดช่วง 15 นาที · from=วันที่ 18 to=วันที่ 19 → ได้ 00:15…24:00 ของวันที่ 18 · f_status/p_status: ว่าง=วัดจริง, E=ระบบเติม, X=ใช้ไม่ได้ · ย้อนหลังได้ 3 เดือน',
+    params:[{k:'from',l:'from',t:'date',v:Y,req:1},{k:'to',l:'to',t:'date',v:TODAY,req:1},
+            {k:'meter',l:'เลข DM (คั่นด้วย ,)',v:'',ph:'DM-01-01-01-01'},{k:'branch',l:'สาขา',ph:'01'},{k:'area',l:'รหัส DMA',ph:''},
+            {k:'limit',l:'limit',t:'number',v:2000}]},
+  {id:'rtu_hourly', group:'RTU', label:'F/P รายชั่วโมง', path:'rtu/hourly',
+    hint:'hour_end = สิ้นสุดชั่วโมง · f_avg/p_avg เฉลี่ยจากค่าที่วัดได้จริง · n_f_e/n_p_e = จำนวนค่า E',
+    params:[{k:'from',l:'from',t:'date',v:Y,req:1},{k:'to',l:'to',t:'date',v:TODAY,req:1},
+            {k:'meter',l:'เลข DM (คั่นด้วย ,)',ph:'DM-01-01-01-01'},{k:'limit',l:'limit',t:'number',v:2000}]},
+  {id:'status_latest', group:'RTU', label:'สถานะชั่วโมงล่าสุด', path:'status/latest',
+    hint:'สถานะชั่วโมงล่าสุดของทุกจุด DM',
+    params:[{k:'branch',l:'รหัสสาขา',ph:'เช่น 01'}]},
+  {id:'quality_daily', group:'RTU', label:'คุณภาพข้อมูลเมื่อวาน', path:'quality/daily',
+    hint:'meter_state / rtu_state: ok, watch, crit, none (มาตรตรวจไม่ได้เพราะตู้ใช้ไม่ได้), silent (ไม่ส่งข้อมูล)',
+    params:[]},
+  {id:'stations', group:'Booster / ท่อประธาน', label:'จุดวัด', path:'stations',
+    hint:'จุดวัดที่ไม่อยู่ใน WLMA พร้อมช่วงข้อมูลที่มีใน hub',
+    params:[{k:'type',l:'ประเภท',t:'select',opts:TYPE_OPTS}]},
+  {id:'station_readings', group:'Booster / ท่อประธาน', label:'ค่า F/P', path:'stations/readings',
+    hint:'f = ลบ.ม./ชม., p = เมตร · from รวม, to ไม่รวม',
+    params:[{k:'from',l:'from',t:'date',v:D7,req:1},{k:'to',l:'to',t:'date',v:TODAY,req:1},
+            {k:'station',l:'รหัสจุด (คั่นด้วย ,)',ph:'BP-0001,TM-0001'},{k:'type',l:'ประเภท',t:'select',opts:TYPE_OPTS},
+            {k:'limit',l:'limit',t:'number',v:2000}]},
   {id:'mnf', group:'MNF', label:'MNF รายวัน', path:'mnf',
-    params:[{k:'dma_code',l:'รหัส DMA'},{k:'date_from',l:'ตั้งแต่',t:'date',v:D7},{k:'date_to',l:'ถึง',t:'date',v:Y}]},
+    hint:'from รวม, to ไม่รวม · ไม่ระบุ DMA = ทุก DMA',
+    params:[{k:'from',l:'from',t:'date',v:D7,req:1},{k:'to',l:'to',t:'date',v:TODAY,req:1},
+            {k:'area',l:'รหัส DMA (คั่นด้วย ,)',ph:''},{k:'limit',l:'limit',t:'number',v:5000}]},
 ];
 
 /* ======================= สถานะหน้า ======================= */
 const $ = id => document.getElementById(id);
 const store = {
-  get(k){ try{ return localStorage.getItem('wlmaHub.'+k); }catch(e){ return null; } },
-  set(k,v){ try{ localStorage.setItem('wlmaHub.'+k, v); }catch(e){} }
+  get(k){ try{ return localStorage.getItem('wlmaHubViewer.'+k); }catch(e){ return null; } },
+  set(k,v){ try{ v == null ? localStorage.removeItem('wlmaHubViewer.'+k) : localStorage.setItem('wlmaHubViewer.'+k, v); }catch(e){} }
 };
+const onServer = location.protocol.startsWith('http');
 let current = PRESETS[0];
-let rows = [], cols = [], view = [], sortCol = null, sortDir = 1, page = 0;
+let rows = [], cols = [], view = [], sortCol = null, sortDir = 1, page = 0, lastResp = null;
+
+function base(){ return ($('baseUrl').value.trim() || (onServer ? location.origin : '')).replace(/\/+$/,''); }
 
 function initConn(){
-  const sameOrigin = location.protocol.startsWith('http') ? location.origin : '';
-  $('baseUrl').value  = store.get('baseUrl')  ?? sameOrigin;
-  $('prefix').value   = store.get('prefix')   ?? '/api/v1';
-  $('keyHeader').value= store.get('keyHeader')?? 'X-API-Key';
-  $('apiKey').value   = store.get('apiKey')   ?? '';
-  const d = store.get('demo');
-  $('demo').checked = d === null ? !sameOrigin : d === '1';
-  if (!$('baseUrl').value) $('connBox').open = true;
+  $('baseUrl').value = store.get('baseUrl') ?? '';
+  const k = store.get('apiKey'); $('apiKey').value = k ?? ''; $('remember').checked = k != null;
+  const d = store.get('demo'); $('demo').checked = d === null ? !onServer : d === '1';
+  if (!$('apiKey').value || !onServer) $('connBox').open = true;
+  const upd = () => { $('docsLink').href = base() + API_PREFIX + '/docs'; };
+  $('baseUrl').oninput = upd; upd();
   $('saveConn').onclick = () => {
-    ['baseUrl','prefix','keyHeader','apiKey'].forEach(k => store.set(k, $(k).value.trim()));
+    store.set('baseUrl', $('baseUrl').value.trim());
+    store.set('apiKey', $('remember').checked ? $('apiKey').value.trim() : null);
     store.set('demo', $('demo').checked ? '1' : '0');
-    flash('บันทึกการเชื่อมต่อแล้ว (เก็บในเบราว์เซอร์เครื่องนี้เท่านั้น)', 'info');
+    flash($('remember').checked ? 'บันทึกแล้ว (key เก็บในเบราว์เซอร์เครื่องนี้)' : 'บันทึกแล้ว (ไม่เก็บ key)', 'info');
   };
 }
 
@@ -186,6 +207,7 @@ function renderTabs(){
     const b = document.createElement('button');
     b.className = 'tab' + (p === current ? ' on' : '');
     b.textContent = p.label;
+    b.title = API_PREFIX + '/' + p.path;
     b.onclick = () => { current = p; renderTabs(); renderParams(); };
     box.append(b);
   });
@@ -193,34 +215,39 @@ function renderTabs(){
 
 function renderParams(){
   const row = $('paramRow'); row.innerHTML = '';
+  $('hint').textContent = `${API_PREFIX}/${current.path} — ${current.hint}`;
+  if (!current.params.length){ row.innerHTML = '<span class="hint">ไม่มีพารามิเตอร์</span>'; return; }
   current.params.forEach(p => {
-    const l = document.createElement('label'); l.textContent = p.l + ' (' + p.k + ')';
-    const i = document.createElement('input'); i.type = p.t || 'text'; i.dataset.k = p.k; i.value = p.v || '';
-    i.addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+    const l = document.createElement('label'); l.textContent = p.l + (p.req ? ' *' : '');
+    let i;
+    if (p.t === 'select'){
+      i = document.createElement('select');
+      p.opts.forEach(o => { const op = document.createElement('option'); op.value = o; op.textContent = o || '(ทั้งหมด)'; i.append(op); });
+    } else {
+      i = document.createElement('input'); i.type = p.t || 'text'; i.value = p.v ?? ''; if (p.ph) i.placeholder = p.ph;
+      if (p.t === 'number') i.style.minWidth = '90px';
+      i.addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+    }
+    i.dataset.k = p.k;
     l.append(i); row.append(l);
   });
-  $('path').value = current.path;
-  $('extra').value = '';
 }
 
-function buildUrl(){
-  const base = $('baseUrl').value.trim().replace(/\/+$/,'');
-  const pre  = ('/' + $('prefix').value.trim()).replace(/\/+/g,'/').replace(/\/$/,'');
-  const path = '/' + $('path').value.trim().replace(/^\/+/,'');
+function buildUrl(extra){
   const qs = new URLSearchParams();
-  document.querySelectorAll('#paramRow input').forEach(i => { if (i.value.trim()) qs.set(i.dataset.k, i.value.trim()); });
-  const extra = new URLSearchParams($('extra').value.trim().replace(/^\?/,''));
-  extra.forEach((v,k) => qs.set(k,v));
+  document.querySelectorAll('#paramRow [data-k]').forEach(i => { if (i.value.trim()) qs.set(i.dataset.k, i.value.trim()); });
+  Object.entries(extra || {}).forEach(([k,v]) => qs.set(k, v));
   const q = qs.toString();
-  return base + pre + path + (q ? '?' + q : '');
+  return base() + API_PREFIX + '/' + current.path + (q ? '?' + q : '');
 }
 
 /* ======================= เรียก API ======================= */
-async function run(){
-  const url = buildUrl();
+async function run(extra){
+  const url = buildUrl(extra);
   const demo = $('demo').checked;
+  if (!demo && !$('apiKey').value.trim()){ $('connBox').open = true; flash('ใส่ API key ก่อน (หรือเปิดโหมดตัวอย่าง)', 'err'); return; }
   $('go').disabled = true; flash('');
-  $('meta').innerHTML = `<span>เรียก: <code>${esc(url)}</code></span>` + (demo ? '<span class="chip c-warn">โหมดตัวอย่าง</span>' : '');
+  $('meta').innerHTML = `<span>GET <code>${esc(url)}</code></span>` + (demo ? '<span class="chip c-warn">โหมดตัวอย่าง</span>' : '');
   const t0 = performance.now();
   try{
     let data, status = 200;
@@ -228,35 +255,42 @@ async function run(){
       await new Promise(r => setTimeout(r, 250));
       data = demoData(current.id);
     } else {
-      const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 60000);
-      const headers = {'Accept':'application/json'};
-      const kh = $('keyHeader').value.trim(), kv = $('apiKey').value.trim();
-      if (kh && kv) headers[kh] = kv;
-      const res = await fetch(url, {headers, signal: ctl.signal});
+      const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 120000);
+      const res = await fetch(url, {headers:{'Accept':'application/json','X-API-Key':$('apiKey').value.trim()}, signal: ctl.signal});
       clearTimeout(to); status = res.status;
       const text = await res.text();
       try { data = JSON.parse(text); } catch(e){ throw new Error(`HTTP ${res.status} — ไม่ใช่ JSON:\n` + text.slice(0,500)); }
-      if (!res.ok) throw new Error(`HTTP ${res.status}\n` + JSON.stringify(data, null, 2).slice(0,800));
+      if (!res.ok) throw new Error(`HTTP ${res.status} — ${explain(res.status)}\n` + detailText(data));
     }
     const ms = Math.round(performance.now() - t0);
+    lastResp = data;
     rows = extractRows(data);
-    $('meta').innerHTML += `<span>HTTP ${status}</span><span>${ms.toLocaleString()} ms</span><span>${rows.length.toLocaleString()} แถว</span>`;
+    $('meta').innerHTML += `<span>HTTP ${status}</span><span>${ms.toLocaleString()} ms</span><span>${rows.length.toLocaleString()} แถว</span>`
+      + (data.generated_at ? `<span>generated_at ${esc(data.generated_at)}</span>` : '');
     $('raw').textContent = JSON.stringify(data, null, 2).slice(0, 200000);
     setupTable();
   } catch(e){
-    let m = e.name === 'AbortError' ? 'หมดเวลารอ (60 วินาที)' : (e.message || String(e));
-    if (e instanceof TypeError) m += '\n\nเรียก server ไม่ได้ — ตรวจ Base URL, เครือข่าย intranet, หรือ CORS ของ FastAPI'
-      + '\n(ถ้าเปิดไฟล์นี้คนละ origin กับ hub ต้องเพิ่ม CORSMiddleware ให้ origin นี้ หรือวางไฟล์ไว้ใน static ของ hub)';
+    let m = e.name === 'AbortError' ? 'หมดเวลารอ (120 วินาที) — ลองลดช่วงวันที่หรือ limit' : (e.message || String(e));
+    if (e instanceof TypeError) m += '\n\nเรียก server ไม่ได้ — ตรวจ Base URL / เครือข่าย intranet'
+      + (onServer && !$('baseUrl').value.trim() ? '' : '\nถ้าเปิดไฟล์นี้จากเครื่อง (file://) จะติด CORS — ให้เปิดผ่าน http://<hub>:8080/static/wlma_hub_api_viewer.html');
     flash(m, 'err');
     $('resultCard').hidden = true;
   } finally { $('go').disabled = false; }
 }
+function explain(s){
+  return {400:'พารามิเตอร์ไม่ถูกต้อง', 401:'ไม่มี key หรือ key ไม่ถูกต้อง', 403:'key นี้ไม่ได้รับอนุญาตบริการนี้ (เพิ่มสิทธิ์ที่หน้า การบริการ API)',
+          404:'ไม่พบ path', 422:'ขาดพารามิเตอร์ที่บังคับ', 429:'เรียกเกิน 60 ครั้ง/นาที', 503:'บริการปิดอยู่'}[s] || '';
+}
+function detailText(d){
+  if (d && typeof d.detail === 'string') return d.detail;
+  if (d && Array.isArray(d.detail)) return d.detail.map(x => (x.loc||[]).slice(1).join('.') + ': ' + x.msg).join('\n');
+  return JSON.stringify(d, null, 2).slice(0, 800);
+}
 
-/* รองรับรูปแบบ response: [..] / {data:[..]} / {rows|items|results:[..]} / {..} เดี่ยว */
 function extractRows(d){
   if (Array.isArray(d)) return d.map(norm);
   if (d && typeof d === 'object'){
-    for (const k of ['data','rows','items','results','records']) if (Array.isArray(d[k])) return d[k].map(norm);
+    if (Array.isArray(d.data)) return d.data.map(norm);
     const firstArr = Object.values(d).find(Array.isArray);
     if (firstArr) return firstArr.map(norm);
     return [norm(d)];
@@ -272,7 +306,20 @@ function setupTable(){
   cols = [...set]; sortCol = null; sortDir = 1; page = 0; $('q').value = '';
   if (!rows.length) flash('ไม่มีข้อมูลตามเงื่อนไขที่เลือก', 'info');
   $('resultCard').hidden = false;
+  renderServerPager();
   applyView();
+}
+
+/* หน้าถัดไปจาก server: next_cursor (rtu) หรือ next_offset (อื่นๆ) */
+function renderServerPager(){
+  const box = $('serverPager'); box.innerHTML = '';
+  const d = lastResp || {};
+  if (!d.next_cursor && d.next_offset == null) return;
+  const s = document.createElement('span'); s.className = 'hint'; s.style.margin = '0';
+  s.textContent = `server ยังมีข้อมูลต่อ (ได้ครบ limit ${d.limit?.toLocaleString?.() ?? ''} แถว)`;
+  const b = document.createElement('button'); b.className = 'ghost'; b.textContent = 'ดึงชุดถัดไปจาก server ›';
+  b.onclick = () => run(d.next_cursor ? {cursor: d.next_cursor} : {offset: d.next_offset});
+  box.append(s, b);
 }
 
 function applyView(){
@@ -311,30 +358,33 @@ function renderTable(){
   }
 }
 
-const FLAG_COL   = /(^|_)(flag|qflag|qf)$|^flag|ธง/i;
-const STATUS_COL = /status|สถานะ|color|colour|สี|result|ผลตรวจ/i;
+/* f_status / p_status ของค่า 15 นาที: ว่าง = วัดจริง, E = ระบบเติม, X = ใช้ไม่ได้ */
+const VALUE_FLAG_COL = /^[fp]_status$/i;
+const STATE_COL = /state|status|สถานะ/i;
 function cell(col, v){
+  const flagCol = VALUE_FLAG_COL.test(col) && current.id === 'rtu';
   if (v === null || v === undefined || v === '') {
-    return FLAG_COL.test(col) ? '<td><span class="chip c-ok">ปกติ</span></td>' : '<td class="null">–</td>';
+    return flagCol ? '<td><span class="chip c-ok">วัดจริง</span></td>' : '<td class="null">–</td>';
   }
   if (typeof v === 'object') return `<td>${esc(JSON.stringify(v))}</td>`;
-  if (FLAG_COL.test(col)) {
+  if (flagCol){
     const f = String(v).toUpperCase();
-    const cls = /[MX]/.test(f) ? 'c-bad' : 'c-warn';
-    return `<td><span class="chip ${cls}" title="ธงคุณภาพ ${esc(f)}">${esc(f)}</span></td>`;
+    const cls = f === 'X' ? 'c-bad' : 'c-warn';
+    const t = f === 'E' ? 'ระบบเติม' : f === 'X' ? 'ใช้ไม่ได้' : f;
+    return `<td><span class="chip ${cls}" title="${esc(t)}">${esc(f)}</span></td>`;
   }
-  if (STATUS_COL.test(col)) { const c = statusClass(v); if (c) return `<td><span class="chip ${c}">${esc(v)}</span></td>`; }
+  if (STATE_COL.test(col) && typeof v === 'string'){ const c = stateClass(v); if (c) return `<td><span class="chip ${c}">${esc(v)}</span></td>`; }
   if (typeof v === 'number') return `<td class="num">${v.toLocaleString('th-TH',{maximumFractionDigits:3})}</td>`;
   if (typeof v === 'boolean') return `<td>${v ? '✓' : '✗'}</td>`;
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v)) return `<td>${esc(v.replace('T',' ').replace(/(:\d{2})(\.\d+)?([+-]\d{2}:?\d{2}|Z)?$/,'$1'))}</td>`;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v)) return `<td title="${esc(v)}">${esc(v.replace('T',' ').replace(/(:\d{2})(\.\d+)?([+-]\d{2}:?\d{2}|Z)?$/,'$1'))}</td>`;
   return `<td>${esc(v)}</td>`;
 }
-function statusClass(v){
-  const s = String(v).toLowerCase();
-  if (/แดง|red|ใช้ไม่ได้|ไม่ผ่าน|bad|fail|error/.test(s)) return 'c-bad';
-  if (/เหลือง|yellow|ผิดปกติ|ต้องตรวจ|warn|review|partial/.test(s)) return 'c-warn';
-  if (/เทา|gr[ae]y|ไม่ส่ง|ตรวจไม่ได้|no.?data|offline/.test(s)) return 'c-gray';
-  if (/เขียว|green|ปกติ|ใช้ได้|ผ่าน|\bok\b|good|pass/.test(s)) return 'c-ok';
+function stateClass(v){
+  const s = v.trim().toLowerCase();
+  if (/^(crit|x|bad|fail|error|red)$|แดง|ใช้ไม่ได้|ไม่ผ่าน/.test(s)) return 'c-bad';
+  if (/^(watch|e|warn|partial|yellow)$|เหลือง|ผิดปกติ|ต้องตรวจ/.test(s)) return 'c-warn';
+  if (/^(none|silent|gray|grey|offline)$|เทา|ไม่ส่ง|ตรวจไม่ได้/.test(s)) return 'c-gray';
+  if (/^(ok|good|pass|green)$|เขียว|ปกติ|ใช้ได้|ผ่าน/.test(s)) return 'c-ok';
   return '';
 }
 
@@ -346,61 +396,61 @@ function exportCsv(){
   const blob = new Blob(['\ufeff' + lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `wlma_hub_${current.id}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `wlma_hub_${current.id}_${TODAY}.csv`;
   a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-/* ======================= ข้อมูลจำลอง (โหมดตัวอย่าง) ======================= */
+/* ======================= ข้อมูลจำลอง (คอลัมน์ตาม api_v1.py) ======================= */
 function demoData(id){
   let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const r2 = x => Math.round(x*100)/100;
   const codes = Array.from({length:24}, (_,i) => `DM-0${1+(i%4)}-0${1+(i%3)}-${String(10+i).padStart(2,'0')}-0${1+(i%2)}`);
-  const branches = ['สุขุมวิท','ลาดพร้าว','บางเขน','ทุ่งมหาเมฆ','สมุทรปราการ','นนทบุรี'];
-  const st = ['เขียว','เขียว','เขียว','เหลือง','แดง','เทาอ่อน'];
-  const flags = ['','','','','','','','E','I','M','S'];
-  const pt = (document.querySelector('#paramRow input[data-k="point_code"]')||{}).value || codes[0];
-  const day = (document.querySelector('#paramRow input[data-k="date_from"]')||{}).value || Y;
+  const states = ['ok','ok','ok','watch','crit','silent'];
+  const val = k => (document.querySelector(`#paramRow [data-k="${k}"]`) || {}).value || '';
+  const day = val('from') || Y;
+  const meters = val('meter') ? val('meter').split(',').map(s => s.trim()) : codes.slice(0,2);
+  const iso = (d, hh, mm) => `${d}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00+07:00`;
+  const nextDay = d => { const t = new Date(d+'T00:00:00'); t.setDate(t.getDate()+1); return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0'); };
+  const wrap = (service, data, extra) => Object.assign({service, count:data.length, generated_at:new Date().toISOString()}, extra || {}, {data});
   switch(id){
-    case 'points': return {data: codes.map((c,i) => ({point_code:c, point_name:'จุดวัด '+(i+1), branch:branches[i%6],
-      rtu_name:'RTU-'+String(1000+i), has_flow:true, has_pressure: i%5!==0, active: i%11!==0}))};
-    case 'rtu': return {point_code:pt, data: Array.from({length:96}, (_,i) => {
-      const t = new Date(day+'T00:00:00'); t.setMinutes(15*(i+1));
-      const f = flags[Math.floor(rnd()*flags.length)];
-      return {log_dt: fmtDt(t), flow_m3h: f==='M'?null:r2(180+120*Math.sin((i-30)/96*2*Math.PI)+rnd()*20),
-        flow_flag:f, pressure_m: r2(12+4*Math.cos(i/96*2*Math.PI)+rnd()), pressure_flag: rnd()<.05?'E':''}; })};
-    case 'rtu_hourly': return {point_code:pt, data: Array.from({length:24}, (_,h) => {
-      const b = 180+120*Math.sin((h*4-30)/96*2*Math.PI);
-      return {hour_dt:`${day} ${String(h+1).padStart(2,'0')}:00`, flow_avg:r2(b), flow_min:r2(b-15*rnd()), flow_max:r2(b+15*rnd()),
-        pressure_avg:r2(12+4*Math.cos(h/24*2*Math.PI)), n_valid: 4-(rnd()<.1?1:0), n_estimated: rnd()<.15?1:0}; })};
-    case 'status_latest': return {data: codes.map((c,i) => ({point_code:c, branch:branches[i%6],
-      last_log_dt:`${Y} ${rnd()<.85?'24:00':'13:45'}`, rtu_status: st[i%6], flow_status: st[(i+2)%6],
-      pct_flow: r2(60+40*rnd()), pct_pressure: r2(50+50*rnd()), days_no_data: st[i%6]==='เทาอ่อน'?3+Math.floor(rnd()*10):0}))};
-    case 'quality_daily': return {date:Y, data: codes.map((c,i) => ({log_date:Y, point_code:c, branch:branches[i%6],
-      n_flow: Math.floor(96*(.6+.4*rnd())), n_pressure: Math.floor(96*(.5+.5*rnd())), n_estimated: Math.floor(rnd()*8),
-      stuck: rnd()<.08, all_zero: rnd()<.04, status: st[i%6]}))};
-    case 'stations': return {data: Array.from({length:8}, (_,i) => ({station_code:(i<4?'BP-':'TM-')+String(i+1).padStart(3,'0'),
-      station_name:(i<4?'Booster Pump ':'ท่อประธาน ')+(i%4+1), station_type: i<4?'Booster Pump':'ท่อประธาน', branch:branches[i%6],
-      has_flow:true, has_pressure:true, last_reading_dt:`${Y} 23:00`}))};
-    case 'stations_readings': return {data: Array.from({length:24}, (_,h) => ({reading_dt:`${day} ${String(h).padStart(2,'0')}:00`,
-      flow_m3h: r2(900+300*Math.sin(h/24*2*Math.PI)+rnd()*40), pressure_m: r2(25+rnd()*3), source:'upload'}))};
-    case 'mnf': { const out=[]; for (let d=6; d>=0; d--){ const dt=ld(d+1);
-      codes.slice(0,6).forEach(c => { const m=r2(20+rnd()*60); out.push({mnf_date:dt, dma_code:c, mnf_m3h:m, mnf_time:'03:'+['00','15','30','45'][Math.floor(rnd()*4)],
-        avg_flow_m3h: r2(m*(2+rnd()*2)), mnf_ratio_pct: r2(25+rnd()*30)}); }); } return {data:out}; }
+    case 'points': return wrap('points', codes.map((c,i) => ({meter_code:c, point_name:'จุดวัด '+(i+1), inflow_area:'DMA-'+(100+i%6),
+      branch_code:String(1+i%6).padStart(2,'0'), branch_name:'สาขา '+(1+i%6), is_active:i%11!==0, in_wlma:true,
+      rtu_id:'RTU-'+(1000+i), rtu_brand:'—', comm_type:'4G', meter_brand:'—', size_mm:[300,400,600][i%3]})));
+    case 'rtu': { const out = []; meters.forEach(m => { for (let i=0;i<96;i++){ const mins = 15*(i+1);
+      const d = mins === 1440 ? nextDay(day) : day, hh = Math.floor(mins/60)%24, mm = mins%60;
+      const r = rnd(), fs = r<.06 ? 'E' : r<.08 ? 'X' : null;
+      out.push({meter_code:m, log_dt:iso(d,hh,mm), f: fs==='X'?null:r2(180+120*Math.sin((i-30)/96*2*Math.PI)+rnd()*20),
+        p: r2(12+4*Math.cos(i/96*2*Math.PI)+rnd()), f_status:fs, p_status: rnd()<.05?'E':null}); } });
+      return wrap('rtu', out, {limit:+val('limit')||10000, next_cursor:null}); }
+    case 'rtu_hourly': { const out = []; meters.forEach(m => { for (let h=1; h<=24; h++){ const b = 180+120*Math.sin((h*4-30)/96*2*Math.PI);
+      out.push({meter_code:m, hour_end: h===24 ? iso(nextDay(day),0,0) : iso(day,h,0), n_f:4-(rnd()<.1?1:0), f_avg:r2(b), n_f_e:rnd()<.15?1:0,
+        n_p:4, p_avg:r2(12+4*Math.cos(h/24*2*Math.PI)), n_p_e:0}); } });
+      return wrap('rtu_hourly', out, {limit:+val('limit')||10000, offset:0, next_offset:null}); }
+    case 'status_latest': return wrap('status_latest', codes.map((c,i) => ({meter_code:c, inflow_area:'DMA-'+(100+i%6), branch_code:String(1+i%6).padStart(2,'0'),
+      hour_start:iso(TODAY,9,0), hour_end:iso(TODAY,10,0), last_data_ts:iso(TODAY,9,45), lag_min:Math.floor(rnd()*40),
+      wlma_status:'—', n_f:4, f_avg:r2(150+rnd()*100), f_status:states[i%6], n_p:4, p_avg:r2(10+rnd()*6), p_status:states[(i+2)%6]})));
+    case 'quality_daily': return wrap('quality_daily', codes.map((c,i) => { const nf = Math.floor(96*(.6+.4*rnd()));
+      return {meter_code:c, day:Y, expected:96, n_f:nf, f_real:nf-2, f_e:2, f_e_pct:r2(200/96), n_p:96, p_real:94, p_e:2, p_e_pct:2.08,
+        rtu_gap:0, meter_gap:96-nf, p_gap:0, f_stuck:rnd()<.08, p_stuck:false,
+        meter_state:states[i%6], meter_reason: states[i%6]==='ok' ? null : 'ตัวอย่างเหตุผล', rtu_state:states[(i+1)%6], rtu_reason:null}; }));
+    case 'stations': return wrap('stations', Array.from({length:6}, (_,i) => ({station_code:(i<3?'BP-':'TM-')+String(i+1).padStart(4,'0'),
+      station_type:i<3?'BOOSTER':'TRUNK', station_name:(i<3?'Booster Pump ':'ท่อประธาน ')+(i%3+1), branch_name:'สาขา '+(1+i),
+      location:'—', latitude:13.7+rnd()/10, longitude:100.5+rnd()/10, n_rows:Math.floor(rnd()*5000), t_from:iso(D7,0,0), t_to:iso(Y,23,0)})));
+    case 'station_readings': return wrap('station_readings', Array.from({length:48}, (_,h) => ({station_code:'BP-0001', station_type:'BOOSTER',
+      log_dt:iso(h<24?day:nextDay(day), h%24, 0), f:r2(900+300*Math.sin(h/24*2*Math.PI)+rnd()*40), p:r2(25+rnd()*3)})), {limit:2000, offset:0, next_offset:null});
+    case 'mnf': { const out=[]; ['DMA-101','DMA-102','DMA-103'].forEach(a => { for (let d=7; d>=1; d--)
+      out.push({area_code:a, mnf_date:ld(d), mnf_hh:'03:'+['00','15','30','45'][Math.floor(rnd()*4)], mnf_flow:r2(20+rnd()*60), average_pressure:r2(8+rnd()*4)}); });
+      return wrap('mnf', out, {limit:5000, offset:0, next_offset:null}); }
   }
   return [];
-}
-function fmtDt(t){ // LOG_DT = ปลายช่วง: 00:15 … 24:00
-  const p = n => String(n).padStart(2,'0');
-  if (t.getHours()===0 && t.getMinutes()===0){ const d = new Date(t - 864e5); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} 24:00`; }
-  return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())} ${p(t.getHours())}:${p(t.getMinutes())}`;
 }
 
 /* ======================= ทั่วไป ======================= */
 function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function flash(m, kind){ $('msg').innerHTML = m ? `<div class="msg ${kind}">${esc(m)}</div>` : ''; return true; }
+function flash(m, kind){ $('msg').innerHTML = m ? `<div class="msg ${kind}">${esc(m)}</div>` : ''; }
 
 initConn(); renderTabs(); renderParams();
-$('go').onclick = run;
+$('go').onclick = () => run();
 $('q').oninput = () => { page = 0; applyView(); };
 $('pageSize').onchange = () => { page = 0; renderTable(); };
 $('csv').onclick = exportCsv;
