@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WLMA Hub API Viewer</title>
+<!--
+  ตัวอย่างหน้าเว็บอ่าน webservice ของ WLMA Data Hub แล้วแสดงเป็นตาราง
+  - ไฟล์เดียว ไม่พึ่ง CDN (ใช้ใน intranet ได้)
+  - ถ้าเปิดจากเครื่องอื่น / คนละ origin กับ hub (port 8080) ต้องเปิด CORS ที่ FastAPI
+    หรือวางไฟล์นี้ใน static ของ hub เอง (แนะนำ) แล้วเปิดผ่าน http://<hub>:8080/...
+  - path / พารามิเตอร์ / header ของ API แก้ได้บนหน้าเว็บ ให้ตรงกับของจริง
+-->
+<style>
+:root{
+  --bg:#f5f7fa; --card:#ffffff; --ink:#1c2733; --muted:#5f6b7a; --line:#dde3ea;
+  --accent:#0b6fb8; --accent-ink:#ffffff; --head:#eef3f8; --hover:#f3f8fd;
+  --ok-bg:#e3f4e8; --ok:#1d6b36; --warn-bg:#fff4d6; --warn:#7a5800;
+  --bad-bg:#fde4e2; --bad:#9b1c13; --gray-bg:#eceff2; --gray:#5c6670;
+  --code:#f0f2f5;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11161c; --card:#1a2129; --ink:#e3e8ee; --muted:#9aa6b3; --line:#2c3642;
+    --accent:#4ea3e6; --accent-ink:#0b1117; --head:#212a34; --hover:#1f2833;
+    --ok-bg:#163522; --ok:#8fdba6; --warn-bg:#3a2f0f; --warn:#f0cf74;
+    --bad-bg:#3d1a17; --bad:#f4a39b; --gray-bg:#262e37; --gray:#a7b1bb; --code:#232c36;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Sarabun","Noto Sans Thai","Leelawadee UI","Tahoma",system-ui,sans-serif;font-size:14px}
+header{padding:14px 20px;border-bottom:1px solid var(--line);background:var(--card);
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header h1{font-size:18px;margin:0;font-weight:600}
+header .sub{color:var(--muted);font-size:13px}
+main{padding:16px 20px;max-width:1500px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:14px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);
+  border-radius:6px;padding:6px 8px;min-width:120px}
+input[type=checkbox]{min-width:0}
+button{font:inherit;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);
+  border-radius:6px;padding:7px 14px;cursor:pointer}
+button.ghost{background:transparent;color:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.tabs .grp{font-size:12px;color:var(--muted);align-self:center;margin:0 4px 0 8px}
+.tab{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.tab.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.meta{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:10px 0}
+.meta code{background:var(--code);padding:2px 6px;border-radius:4px;color:var(--ink);word-break:break-all}
+.msg{padding:10px 12px;border-radius:6px;margin:8px 0;white-space:pre-wrap}
+.msg.err{background:var(--bad-bg);color:var(--bad)}
+.msg.info{background:var(--gray-bg);color:var(--gray)}
+.tablewrap{overflow:auto;max-height:65vh;border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:left}
+th{position:sticky;top:0;background:var(--head);cursor:pointer;user-select:none;font-weight:600;z-index:1}
+th .arr{color:var(--muted);font-size:11px;margin-left:4px}
+td.num{text-align:right}
+td.null{color:var(--muted)}
+tbody tr:hover{background:var(--hover)}
+.chip{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px}
+.c-ok{background:var(--ok-bg);color:var(--ok)}
+.c-warn{background:var(--warn-bg);color:var(--warn)}
+.c-bad{background:var(--bad-bg);color:var(--bad)}
+.c-gray{background:var(--gray-bg);color:var(--gray)}
+.pager{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+pre{background:var(--code);padding:10px;border-radius:6px;overflow:auto;max-height:50vh;font-size:12px}
+details summary{cursor:pointer;color:var(--muted);font-size:13px}
+@media (max-width:640px){main{padding:12px 16px}input,select{min-width:0;width:100%}label{flex:1 1 140px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>WLMA Data Hub · ตัวอย่างอ่าน API</h1>
+  <span class="sub">เรียก webservice ของ hub แล้วแสดงเป็นตาราง (เรียง / ค้นหา / ส่งออก CSV)</span>
+</header>
+<main>
+
+  <!-- การเชื่อมต่อ -->
+  <section class="card">
+    <details id="connBox">
+      <summary>การเชื่อมต่อ API (คลิกเพื่อตั้งค่า)</summary>
+      <div class="row" style="margin-top:10px">
+        <label>Base URL ของ hub<input id="baseUrl" style="min-width:240px" placeholder="http://hub-server:8080"></label>
+        <label>Prefix ของ API<input id="prefix" placeholder="/api/v1"></label>
+        <label>ชื่อ Header ของ key<input id="keyHeader" placeholder="X-API-Key"></label>
+        <label>API key<input id="apiKey" type="password" style="min-width:220px" placeholder="(ถ้ามี)"></label>
+        <label style="flex-direction:row;align-items:center;gap:6px;color:var(--ink)">
+          <input id="demo" type="checkbox"> โหมดตัวอย่าง (ข้อมูลจำลอง ไม่เรียก server)</label>
+        <button class="ghost" id="saveConn">บันทึกในเครื่องนี้</button>
+      </div>
+    </details>
+  </section>
+
+  <!-- เลือก endpoint + พารามิเตอร์ -->
+  <section class="card">
+    <div class="tabs" id="tabs"></div>
+    <div class="row" id="paramRow"></div>
+    <div class="row" style="margin-top:10px">
+      <label>Path<input id="path" style="min-width:200px"></label>
+      <label>พารามิเตอร์เพิ่ม (query string)<input id="extra" style="min-width:220px" placeholder="เช่น limit=1000&offset=0"></label>
+      <button id="go">ดึงข้อมูล</button>
+    </div>
+    <div class="meta" id="meta"></div>
+    <div id="msg"></div>
+  </section>
+
+  <!-- ผลลัพธ์ -->
+  <section class="card" id="resultCard" hidden>
+    <div class="row" style="justify-content:space-between">
+      <label>ค้นหาในตาราง<input id="q" style="min-width:240px" placeholder="พิมพ์รหัสจุด / ค่า / สถานะ"></label>
+      <div class="row">
+        <label>แถวต่อหน้า
+          <select id="pageSize"><option>25</option><option selected>50</option><option>100</option><option>500</option></select>
+        </label>
+        <button class="ghost" id="csv">ส่งออก CSV</button>
+      </div>
+    </div>
+    <div class="meta" id="tableMeta"></div>
+    <div class="tablewrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+    <div class="pager" id="pager"></div>
+    <details style="margin-top:12px"><summary>ดู JSON ดิบ</summary><pre id="raw"></pre></details>
+  </section>
+</main>
+
+<script>
+/* ======================= ตั้งค่า endpoint =======================
+   path / ชื่อพารามิเตอร์ด้านล่างเป็นค่าตั้งต้น — แก้ให้ตรงกับ API จริงของ hub
+   type: date = ช่องวันที่, text = ช่องข้อความ                         */
+const ld = n => { const d = new Date(Date.now() - n*864e5); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+const Y = ld(1);   // เมื่อวาน (เวลาเครื่อง)
+const D7 = ld(7);
+const PRESETS = [
+  {id:'points', group:'RTU', label:'จุดวัด', path:'points',
+    params:[{k:'branch',l:'สาขา'}]},
+  {id:'rtu', group:'RTU', label:'ข้อมูล 15 นาที', path:'rtu',
+    params:[{k:'point_code',l:'รหัสจุด',v:'DM-01-01-01-01'},{k:'date_from',l:'ตั้งแต่',t:'date',v:Y},{k:'date_to',l:'ถึง',t:'date',v:Y}]},
+  {id:'rtu_hourly', group:'RTU', label:'รายชั่วโมง', path:'rtu/hourly',
+    params:[{k:'point_code',l:'รหัสจุด',v:'DM-01-01-01-01'},{k:'date_from',l:'ตั้งแต่',t:'date',v:Y},{k:'date_to',l:'ถึง',t:'date',v:Y}]},
+  {id:'status_latest', group:'RTU', label:'สถานะล่าสุด', path:'status/latest',
+    params:[{k:'branch',l:'สาขา'}]},
+  {id:'quality_daily', group:'RTU', label:'คุณภาพรายวัน', path:'quality/daily',
+    params:[{k:'date',l:'วันที่',t:'date',v:Y},{k:'branch',l:'สาขา'}]},
+  {id:'stations', group:'RTU', label:'Booster / ท่อประธาน', path:'stations',
+    params:[{k:'station_type',l:'ประเภท'}]},
+  {id:'stations_readings', group:'RTU', label:'ค่าอ่านสถานี', path:'stations/readings',
+    params:[{k:'station_code',l:'รหัสสถานี'},{k:'date_from',l:'ตั้งแต่',t:'date',v:Y},{k:'date_to',l:'ถึง',t:'date',v:Y}]},
+  {id:'mnf', group:'MNF', label:'MNF รายวัน', path:'mnf',
+    params:[{k:'dma_code',l:'รหัส DMA'},{k:'date_from',l:'ตั้งแต่',t:'date',v:D7},{k:'date_to',l:'ถึง',t:'date',v:Y}]},
+];
+
+/* ======================= สถานะหน้า ======================= */
+const $ = id => document.getElementById(id);
+const store = {
+  get(k){ try{ return localStorage.getItem('wlmaHub.'+k); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem('wlmaHub.'+k, v); }catch(e){} }
+};
+let current = PRESETS[0];
+let rows = [], cols = [], view = [], sortCol = null, sortDir = 1, page = 0;
+
+function initConn(){
+  const sameOrigin = location.protocol.startsWith('http') ? location.origin : '';
+  $('baseUrl').value  = store.get('baseUrl')  ?? sameOrigin;
+  $('prefix').value   = store.get('prefix')   ?? '/api/v1';
+  $('keyHeader').value= store.get('keyHeader')?? 'X-API-Key';
+  $('apiKey').value   = store.get('apiKey')   ?? '';
+  const d = store.get('demo');
+  $('demo').checked = d === null ? !sameOrigin : d === '1';
+  if (!$('baseUrl').value) $('connBox').open = true;
+  $('saveConn').onclick = () => {
+    ['baseUrl','prefix','keyHeader','apiKey'].forEach(k => store.set(k, $(k).value.trim()));
+    store.set('demo', $('demo').checked ? '1' : '0');
+    flash('บันทึกการเชื่อมต่อแล้ว (เก็บในเบราว์เซอร์เครื่องนี้เท่านั้น)', 'info');
+  };
+}
+
+function renderTabs(){
+  const box = $('tabs'); box.innerHTML = '';
+  let g = null;
+  PRESETS.forEach(p => {
+    if (p.group !== g){ g = p.group; const s = document.createElement('span'); s.className='grp'; s.textContent=g; box.append(s); }
+    const b = document.createElement('button');
+    b.className = 'tab' + (p === current ? ' on' : '');
+    b.textContent = p.label;
+    b.onclick = () => { current = p; renderTabs(); renderParams(); };
+    box.append(b);
+  });
+}
+
+function renderParams(){
+  const row = $('paramRow'); row.innerHTML = '';
+  current.params.forEach(p => {
+    const l = document.createElement('label'); l.textContent = p.l + ' (' + p.k + ')';
+    const i = document.createElement('input'); i.type = p.t || 'text'; i.dataset.k = p.k; i.value = p.v || '';
+    i.addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+    l.append(i); row.append(l);
+  });
+  $('path').value = current.path;
+  $('extra').value = '';
+}
+
+function buildUrl(){
+  const base = $('baseUrl').value.trim().replace(/\/+$/,'');
+  const pre  = ('/' + $('prefix').value.trim()).replace(/\/+/g,'/').replace(/\/$/,'');
+  const path = '/' + $('path').value.trim().replace(/^\/+/,'');
+  const qs = new URLSearchParams();
+  document.querySelectorAll('#paramRow input').forEach(i => { if (i.value.trim()) qs.set(i.dataset.k, i.value.trim()); });
+  const extra = new URLSearchParams($('extra').value.trim().replace(/^\?/,''));
+  extra.forEach((v,k) => qs.set(k,v));
+  const q = qs.toString();
+  return base + pre + path + (q ? '?' + q : '');
+}
+
+/* ======================= เรียก API ======================= */
+async function run(){
+  const url = buildUrl();
+  const demo = $('demo').checked;
+  $('go').disabled = true; flash('');
+  $('meta').innerHTML = `<span>เรียก: <code>${esc(url)}</code></span>` + (demo ? '<span class="chip c-warn">โหมดตัวอย่าง</span>' : '');
+  const t0 = performance.now();
+  try{
+    let data, status = 200;
+    if (demo){
+      await new Promise(r => setTimeout(r, 250));
+      data = demoData(current.id);
+    } else {
+      const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 60000);
+      const headers = {'Accept':'application/json'};
+      const kh = $('keyHeader').value.trim(), kv = $('apiKey').value.trim();
+      if (kh && kv) headers[kh] = kv;
+      const res = await fetch(url, {headers, signal: ctl.signal});
+      clearTimeout(to); status = res.status;
+      const text = await res.text();
+      try { data = JSON.parse(text); } catch(e){ throw new Error(`HTTP ${res.status} — ไม่ใช่ JSON:\n` + text.slice(0,500)); }
+      if (!res.ok) throw new Error(`HTTP ${res.status}\n` + JSON.stringify(data, null, 2).slice(0,800));
+    }
+    const ms = Math.round(performance.now() - t0);
+    rows = extractRows(data);
+    $('meta').innerHTML += `<span>HTTP ${status}</span><span>${ms.toLocaleString()} ms</span><span>${rows.length.toLocaleString()} แถว</span>`;
+    $('raw').textContent = JSON.stringify(data, null, 2).slice(0, 200000);
+    setupTable();
+  } catch(e){
+    let m = e.name === 'AbortError' ? 'หมดเวลารอ (60 วินาที)' : (e.message || String(e));
+    if (e instanceof TypeError) m += '\n\nเรียก server ไม่ได้ — ตรวจ Base URL, เครือข่าย intranet, หรือ CORS ของ FastAPI'
+      + '\n(ถ้าเปิดไฟล์นี้คนละ origin กับ hub ต้องเพิ่ม CORSMiddleware ให้ origin นี้ หรือวางไฟล์ไว้ใน static ของ hub)';
+    flash(m, 'err');
+    $('resultCard').hidden = true;
+  } finally { $('go').disabled = false; }
+}
+
+/* รองรับรูปแบบ response: [..] / {data:[..]} / {rows|items|results:[..]} / {..} เดี่ยว */
+function extractRows(d){
+  if (Array.isArray(d)) return d.map(norm);
+  if (d && typeof d === 'object'){
+    for (const k of ['data','rows','items','results','records']) if (Array.isArray(d[k])) return d[k].map(norm);
+    const firstArr = Object.values(d).find(Array.isArray);
+    if (firstArr) return firstArr.map(norm);
+    return [norm(d)];
+  }
+  return [{value: d}];
+}
+function norm(r){ return (r && typeof r === 'object' && !Array.isArray(r)) ? r : {value: r}; }
+
+/* ======================= ตาราง ======================= */
+function setupTable(){
+  const set = new Set();
+  rows.slice(0, 500).forEach(r => Object.keys(r).forEach(k => set.add(k)));
+  cols = [...set]; sortCol = null; sortDir = 1; page = 0; $('q').value = '';
+  if (!rows.length) flash('ไม่มีข้อมูลตามเงื่อนไขที่เลือก', 'info');
+  $('resultCard').hidden = false;
+  applyView();
+}
+
+function applyView(){
+  const q = $('q').value.trim().toLowerCase();
+  view = q ? rows.filter(r => cols.some(c => String(r[c] ?? '').toLowerCase().includes(q))) : rows.slice();
+  if (sortCol){
+    view.sort((a,b) => {
+      const x = a[sortCol], y = b[sortCol];
+      if (x == null) return 1; if (y == null) return -1;
+      const nx = +x, ny = +y;
+      return (!isNaN(nx) && !isNaN(ny) && x !== '' && y !== '' ? nx - ny : String(x).localeCompare(String(y), 'th')) * sortDir;
+    });
+  }
+  renderTable();
+}
+
+function renderTable(){
+  const ps = +$('pageSize').value, pages = Math.max(1, Math.ceil(view.length / ps));
+  page = Math.min(page, pages - 1);
+  const thead = $('tbl').tHead, tbody = $('tbl').tBodies[0];
+  thead.innerHTML = '<tr>' + cols.map(c =>
+    `<th data-c="${esc(c)}">${esc(c)}<span class="arr">${sortCol===c ? (sortDir>0?'▲':'▼') : ''}</span></th>`).join('') + '</tr>';
+  thead.querySelectorAll('th').forEach(th => th.onclick = () => {
+    const c = th.dataset.c; sortDir = sortCol === c ? -sortDir : 1; sortCol = c; applyView();
+  });
+  const slice = view.slice(page*ps, page*ps + ps);
+  tbody.innerHTML = slice.map(r => '<tr>' + cols.map(c => cell(c, r[c])).join('') + '</tr>').join('');
+  $('tableMeta').textContent = `แสดง ${view.length ? (page*ps+1).toLocaleString() : 0}–${Math.min(view.length,(page+1)*ps).toLocaleString()} จาก ${view.length.toLocaleString()} แถว`
+    + (view.length !== rows.length ? ` (กรองจาก ${rows.length.toLocaleString()})` : '') + ` · ${cols.length} คอลัมน์ · คลิกหัวคอลัมน์เพื่อเรียง`;
+  const pg = $('pager'); pg.innerHTML = '';
+  if (pages > 1){
+    const mk = (t, p, dis) => { const b = document.createElement('button'); b.className='ghost'; b.textContent=t; b.disabled=dis; b.onclick=()=>{page=p;renderTable();}; pg.append(b); };
+    mk('« แรก', 0, page===0); mk('‹ ก่อน', page-1, page===0);
+    const s = document.createElement('span'); s.textContent = `หน้า ${page+1} / ${pages}`; pg.append(s);
+    mk('ถัดไป ›', page+1, page>=pages-1); mk('สุดท้าย »', pages-1, page>=pages-1);
+  }
+}
+
+const FLAG_COL   = /(^|_)(flag|qflag|qf)$|^flag|ธง/i;
+const STATUS_COL = /status|สถานะ|color|colour|สี|result|ผลตรวจ/i;
+function cell(col, v){
+  if (v === null || v === undefined || v === '') {
+    return FLAG_COL.test(col) ? '<td><span class="chip c-ok">ปกติ</span></td>' : '<td class="null">–</td>';
+  }
+  if (typeof v === 'object') return `<td>${esc(JSON.stringify(v))}</td>`;
+  if (FLAG_COL.test(col)) {
+    const f = String(v).toUpperCase();
+    const cls = /[MX]/.test(f) ? 'c-bad' : 'c-warn';
+    return `<td><span class="chip ${cls}" title="ธงคุณภาพ ${esc(f)}">${esc(f)}</span></td>`;
+  }
+  if (STATUS_COL.test(col)) { const c = statusClass(v); if (c) return `<td><span class="chip ${c}">${esc(v)}</span></td>`; }
+  if (typeof v === 'number') return `<td class="num">${v.toLocaleString('th-TH',{maximumFractionDigits:3})}</td>`;
+  if (typeof v === 'boolean') return `<td>${v ? '✓' : '✗'}</td>`;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v)) return `<td>${esc(v.replace('T',' ').replace(/(:\d{2})(\.\d+)?([+-]\d{2}:?\d{2}|Z)?$/,'$1'))}</td>`;
+  return `<td>${esc(v)}</td>`;
+}
+function statusClass(v){
+  const s = String(v).toLowerCase();
+  if (/แดง|red|ใช้ไม่ได้|ไม่ผ่าน|bad|fail|error/.test(s)) return 'c-bad';
+  if (/เหลือง|yellow|ผิดปกติ|ต้องตรวจ|warn|review|partial/.test(s)) return 'c-warn';
+  if (/เทา|gr[ae]y|ไม่ส่ง|ตรวจไม่ได้|no.?data|offline/.test(s)) return 'c-gray';
+  if (/เขียว|green|ปกติ|ใช้ได้|ผ่าน|\bok\b|good|pass/.test(s)) return 'c-ok';
+  return '';
+}
+
+/* ======================= CSV ======================= */
+function exportCsv(){
+  const q = v => { if (v == null) return ''; const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s; };
+  const lines = [cols.map(q).join(',')].concat(view.map(r => cols.map(c => q(r[c])).join(',')));
+  const blob = new Blob(['\ufeff' + lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `wlma_hub_${current.id}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ======================= ข้อมูลจำลอง (โหมดตัวอย่าง) ======================= */
+function demoData(id){
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const r2 = x => Math.round(x*100)/100;
+  const codes = Array.from({length:24}, (_,i) => `DM-0${1+(i%4)}-0${1+(i%3)}-${String(10+i).padStart(2,'0')}-0${1+(i%2)}`);
+  const branches = ['สุขุมวิท','ลาดพร้าว','บางเขน','ทุ่งมหาเมฆ','สมุทรปราการ','นนทบุรี'];
+  const st = ['เขียว','เขียว','เขียว','เหลือง','แดง','เทาอ่อน'];
+  const flags = ['','','','','','','','E','I','M','S'];
+  const pt = (document.querySelector('#paramRow input[data-k="point_code"]')||{}).value || codes[0];
+  const day = (document.querySelector('#paramRow input[data-k="date_from"]')||{}).value || Y;
+  switch(id){
+    case 'points': return {data: codes.map((c,i) => ({point_code:c, point_name:'จุดวัด '+(i+1), branch:branches[i%6],
+      rtu_name:'RTU-'+String(1000+i), has_flow:true, has_pressure: i%5!==0, active: i%11!==0}))};
+    case 'rtu': return {point_code:pt, data: Array.from({length:96}, (_,i) => {
+      const t = new Date(day+'T00:00:00'); t.setMinutes(15*(i+1));
+      const f = flags[Math.floor(rnd()*flags.length)];
+      return {log_dt: fmtDt(t), flow_m3h: f==='M'?null:r2(180+120*Math.sin((i-30)/96*2*Math.PI)+rnd()*20),
+        flow_flag:f, pressure_m: r2(12+4*Math.cos(i/96*2*Math.PI)+rnd()), pressure_flag: rnd()<.05?'E':''}; })};
+    case 'rtu_hourly': return {point_code:pt, data: Array.from({length:24}, (_,h) => {
+      const b = 180+120*Math.sin((h*4-30)/96*2*Math.PI);
+      return {hour_dt:`${day} ${String(h+1).padStart(2,'0')}:00`, flow_avg:r2(b), flow_min:r2(b-15*rnd()), flow_max:r2(b+15*rnd()),
+        pressure_avg:r2(12+4*Math.cos(h/24*2*Math.PI)), n_valid: 4-(rnd()<.1?1:0), n_estimated: rnd()<.15?1:0}; })};
+    case 'status_latest': return {data: codes.map((c,i) => ({point_code:c, branch:branches[i%6],
+      last_log_dt:`${Y} ${rnd()<.85?'24:00':'13:45'}`, rtu_status: st[i%6], flow_status: st[(i+2)%6],
+      pct_flow: r2(60+40*rnd()), pct_pressure: r2(50+50*rnd()), days_no_data: st[i%6]==='เทาอ่อน'?3+Math.floor(rnd()*10):0}))};
+    case 'quality_daily': return {date:Y, data: codes.map((c,i) => ({log_date:Y, point_code:c, branch:branches[i%6],
+      n_flow: Math.floor(96*(.6+.4*rnd())), n_pressure: Math.floor(96*(.5+.5*rnd())), n_estimated: Math.floor(rnd()*8),
+      stuck: rnd()<.08, all_zero: rnd()<.04, status: st[i%6]}))};
+    case 'stations': return {data: Array.from({length:8}, (_,i) => ({station_code:(i<4?'BP-':'TM-')+String(i+1).padStart(3,'0'),
+      station_name:(i<4?'Booster Pump ':'ท่อประธาน ')+(i%4+1), station_type: i<4?'Booster Pump':'ท่อประธาน', branch:branches[i%6],
+      has_flow:true, has_pressure:true, last_reading_dt:`${Y} 23:00`}))};
+    case 'stations_readings': return {data: Array.from({length:24}, (_,h) => ({reading_dt:`${day} ${String(h).padStart(2,'0')}:00`,
+      flow_m3h: r2(900+300*Math.sin(h/24*2*Math.PI)+rnd()*40), pressure_m: r2(25+rnd()*3), source:'upload'}))};
+    case 'mnf': { const out=[]; for (let d=6; d>=0; d--){ const dt=ld(d+1);
+      codes.slice(0,6).forEach(c => { const m=r2(20+rnd()*60); out.push({mnf_date:dt, dma_code:c, mnf_m3h:m, mnf_time:'03:'+['00','15','30','45'][Math.floor(rnd()*4)],
+        avg_flow_m3h: r2(m*(2+rnd()*2)), mnf_ratio_pct: r2(25+rnd()*30)}); }); } return {data:out}; }
+  }
+  return [];
+}
+function fmtDt(t){ // LOG_DT = ปลายช่วง: 00:15 … 24:00
+  const p = n => String(n).padStart(2,'0');
+  if (t.getHours()===0 && t.getMinutes()===0){ const d = new Date(t - 864e5); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} 24:00`; }
+  return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())} ${p(t.getHours())}:${p(t.getMinutes())}`;
+}
+
+/* ======================= ทั่วไป ======================= */
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function flash(m, kind){ $('msg').innerHTML = m ? `<div class="msg ${kind}">${esc(m)}</div>` : ''; return true; }
+
+initConn(); renderTabs(); renderParams();
+$('go').onclick = run;
+$('q').oninput = () => { page = 0; applyView(); };
+$('pageSize').onchange = () => { page = 0; renderTable(); };
+$('csv').onclick = exportCsv;
+</script>
+</body>
+</html>
