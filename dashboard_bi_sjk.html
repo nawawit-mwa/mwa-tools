@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>รายงานส่วนจัดเก็บและรับเงิน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme: light;
+  --bg:#eef5fc; --surface:#ffffff; --surface-2:#f6f8fb; --line:#e3e7ee; --grid:#eceff3;
+  --text:#191919; --text-2:#5f6670; --text-3:#8a919b;
+  --brand:#1f5fb3; --brand-2:#2a74d0;
+  --s-cur:#257de0; --s-pre:#b4bcc7; --s-tgt:#f47230;
+  --good:#006c10; --good-bg:#e6f4e8; --bad:#c22f30; --bad-bg:#fcebeb;
+  --div-pos:#257de0; --div-neg:#ec4647;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Sarabun","Noto Sans Thai",system-ui,sans-serif;font-size:15px;line-height:1.45}
+.wrap{max-width:1200px;margin:0 auto;padding:14px 20px 30px}
+header.top{background:var(--brand);color:#fff;border-radius:14px;padding:12px 18px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between}
+header.top h1{margin:0;font-size:20px;font-weight:700}
+header.top .sub{opacity:.8;font-size:14px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.controls label{font-size:14px;opacity:.9}
+select,button{font:inherit;font-size:14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--text);padding:6px 10px;cursor:pointer}
+header.top select{border-color:transparent}
+header.top button{background:transparent;color:#fff;border-color:rgba(255,255,255,.5)}
+header.top button:hover{background:rgba(255,255,255,.12)}
+h2{font-size:18px;margin:14px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+h2 small{font-weight:400;color:var(--text-2);font-size:14px}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:820px}
+.grid5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+@media (max-width:1100px){.grid5{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:700px){.grid5{grid-template-columns:1fr}}
+.na2{font-size:12px;color:var(--text-3);font-weight:400}
+@media (max-width:980px){.grid4{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:640px){.grid4,.grid3{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.kpi .lbl{font-size:14px;color:var(--text-2);font-weight:500}
+.kpi .val{font-size:24px;font-weight:700;line-height:1.15;margin:2px 0 0;font-variant-numeric:tabular-nums}
+.kpi .val .u{font-size:14px;font-weight:500;color:var(--text-2);margin-left:4px}
+.kpi .na{font-size:18px;color:var(--text-3);margin:10px 0}
+.cmp{display:grid;grid-template-columns:auto 1fr auto;gap:3px 8px;align-items:center;font-size:13px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}
+.cmp .k{color:var(--text-2);white-space:nowrap}
+.cmp .v{color:var(--text-2);font-variant-numeric:tabular-nums;text-align:right}
+.cmp .chip{justify-self:end;font-size:12.5px;padding:1px 7px}
+.chip{display:inline-flex;gap:3px;align-items:center;padding:1px 7px;border-radius:999px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:13px}
+.chip.up{color:var(--good);background:var(--good-bg)}
+.chip.down{color:var(--bad);background:var(--bad-bg)}
+.chip.flat{color:var(--text-2);background:var(--surface-2)}
+.bar-wrap{margin-top:10px}
+.bar-wrap .track{position:relative;height:8px;border-radius:4px;background:var(--surface-2)}
+.bar-wrap .fill{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:var(--s-cur)}
+.bar-wrap .tick{position:absolute;top:-4px;width:2px;height:16px;background:var(--s-tgt);border-radius:1px}
+.bar-wrap .cap{display:flex;justify-content:space-between;font-size:12px;color:var(--text-3);margin-top:3px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;border-radius:0;padding:6px 12px;background:transparent}
+.seg button[aria-pressed="true"]{background:var(--brand-2);color:#fff}
+.chart-head{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;margin-bottom:4px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13.5px;color:var(--text-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+.sw.line{height:3px;width:16px;border-radius:2px}
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:auto}
+.chart text{font-family:inherit;fill:var(--text-2);font-size:12px}
+.chart text.vl{font-size:10.5px;font-variant-numeric:tabular-nums}
+.chart text.vl.pre{fill:var(--text-3)}
+.chart text.vl.cur{fill:#1659b0;font-weight:700}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);box-shadow:0 4px 14px rgba(0,0,0,.12);border-radius:8px;padding:8px 10px;font-size:13px;min-width:170px;opacity:0;transition:opacity .1s;z-index:5}
+.tip b{display:block;margin-bottom:4px}
+.tip .r{display:flex;justify-content:space-between;gap:12px;font-variant-numeric:tabular-nums}
+.tip .r span:first-child{display:inline-flex;align-items:center;gap:6px;color:var(--text-2)}
+details{margin-top:4px}
+summary{cursor:pointer;color:var(--text-2);font-size:13.5px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--text-2);font-weight:600;background:var(--surface-2);position:sticky;top:0}
+.scroll{overflow:auto;max-height:520px}
+.rci .grp{font-size:13px;color:var(--text-2)}
+.rci .share{font-size:13px;color:var(--text-2);margin-top:2px}
+.divbar{position:relative;height:14px;min-width:160px}
+.divbar .mid{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--text-3)}
+.divbar .b{position:absolute;top:2px;height:10px}
+.divbar .b.pos{left:50%;background:var(--div-pos);border-radius:0 4px 4px 0}
+.divbar .b.neg{right:50%;background:var(--div-neg);border-radius:4px 0 0 4px}
+.tag{display:inline-block;font-size:11.5px;font-weight:600;border-radius:4px;padding:0 5px;margin-right:6px;background:var(--surface-2);color:var(--text-2);border:1px solid var(--line)}
+.note{font-size:13.5px;color:var(--text-2)}
+.note ul{margin:6px 0 0;padding-left:20px}
+.status{font-size:13px;color:#fff;opacity:.85}
+.foot{margin-top:24px;font-size:12.5px;color:var(--text-3)}
+h3.grp{font-size:15px;margin:14px 0 6px;color:var(--text-2);font-weight:600}
+.seg{flex-wrap:wrap}
+
+body{background:#fff}
+.titlebox{width:min(460px,100%);margin:6px auto 14px;background:#4472c4;border:2px solid #2f528f;border-radius:16px;color:#fff;text-align:center;padding:20px 16px;font-size:20px;font-weight:600}
+.panel{background:#eef5fc;border:1px solid #a6b3c2;padding:10px 14px 14px;margin-top:12px}
+.panel h3.grp{margin:8px 0 6px}
+.chan .crow{display:grid;grid-template-columns:230px 1fr;gap:10px;align-items:center;padding:5px 0}
+.chan .tot{border-top:2px solid var(--line);margin-top:6px;padding-top:10px}
+.chan .nm{font-size:14px}
+.chan .bb{display:flex;flex-direction:column;gap:3px}
+.chan .b{display:flex;align-items:center;gap:8px;font-size:12.5px;font-variant-numeric:tabular-nums}
+.chan .b i{display:block;height:13px;border-radius:3px;min-width:2px}
+.chan .b.c i{background:var(--s-cur)}.chan .b.p i{background:var(--s-pre)}
+.chan .b.c span{font-weight:700}.chan .b.p span{color:var(--text-3)}
+@media(max-width:700px){.chan .crow{grid-template-columns:1fr}}
+</style>
+</head>
+
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>รายงานส่วนจัดเก็บและรับเงิน <span id="hMonth"></span></h1>
+    </div>
+    <div class="controls">
+      <label for="selMonth">เดือน</label>
+      <select id="selMonth"></select>
+      <button id="btnLoad" title="โหลดไฟล์ สจก_BI.xlsx ฉบับใหม่ (โครงสร้างชีตเดิม)">โหลดไฟล์ใหม่ (.xlsx)</button>
+      <input type="file" id="fileIn" accept=".xlsx,.xls" hidden>
+      <span class="status" id="loadStatus"></span>
+    </div>
+  </header>
+
+  <div class="titlebox" style="margin-top:14px">รับชำระค่าน้ำประปาช่องทางต่างๆ</div>
+
+  <h2><span id="secTitle"></span> <small id="t1"></small></h2>
+  <div class="card chan">
+    <div class="chart-head"><div class="legend" id="chanLeg"></div><div class="note" id="chanTitle"></div></div>
+    <div id="chanChart"></div>
+  </div>
+  <div class="panel" id="kpiMonth"></div>
+
+  <h2>หมายเหตุข้อมูล</h2>
+  <div class="card note" id="dataNote"></div>
+
+  <div class="foot" id="foot"></div>
+</div>
+
+<script>
+const RAW = {"ช่องทางการรับชำระค่าน้ำ": [["Fiscal month", "month order", "Year label", "Metric type", "Mobile Applicaiton./KTB Cross Bank", "หักบัญชีธนาคาร/เครดิต", "Counter Service", "รับชำระต่างสาขา ฯ", "รับชำระที่สำนักงาน", "จอดจ่ายจร", "ช่องทางอื่น ๆ", "รวม"], ["ต.ค.", 1, 2025, "actual pre", 99267, 36855, 17310, 4412, 3179, 1580, 3520, 166123], ["ต.ค.", 1, 2026, "actual curr", 100976, 36848, 13514, 3962, 2916, 990, 3750, 162956], ["พ.ย.", 2, 2025, "actual pre", 95843, 36897, 16164, 4098, 3050, 1399, 3675, 161126], ["พ.ย.", 2, 2026, "actual curr", null, null, null, null, 0, null, 0], ["ธ.ค.", 3, 2025, "actual pre", 104423, 36906, 17484, 4295, 3375, 1361, 3771, 171615], ["ธ.ค.", 3, 2026, "actual curr", null, null, null, null, 0, null, 0], ["ม.ค.", 4, 2026, "actual pre", 99778, 36870, 16363, 4063, 2979, 1542, 4890, 166485], ["ม.ค.", 4, 2027, "actual curr", null, null, null, null, 0, null, 0], ["ก.พ.", 5, 2026, "actual pre", 96138, 36956, 15118, 3888, 2652, 1597, 4369, 160718], ["ก.พ.", 5, 2027, "actual curr", null, null, null, null, 0, null, 0], ["มี.ค.", 6, 2026, "actual pre", 107393, 36936, 16830, 4528, 2956, 1434, 4471, 174548], ["มี.ค.", 6, 2027, "actual curr", null, null, null, null, 0, null, 0], ["เม.ย.", 7, 2026, "actual pre", 99150, 36885, 15055, 4038, 2848, 1393, 4253, 163622], ["เม.ย.", 7, 2027, "actual curr", null, null, null, null, 0, null, 0], ["พ.ค.", 8, 2026, "actual pre", 101517, 36803, 15732, 4229, 3114, 1233, 4514, 167142], ["พ.ค.", 8, 2027, "actual curr", null, null, null, null, 0, null, 0], ["มิ.ย.", 9, 2026, "actual pre", 103173, 36896, 14565, 4299, 3294, 1431, 4308, 167966], ["มิ.ย.", 9, 2027, "actual curr", null, null, null, null, 0, null, 0], ["ก.ค.", 10, 2026, "actual pre", 106130, 36906, 14453, 4291, 3302, 1002, 4901, 170985], ["ก.ค.", 10, 2027, "actual curr", null, null, null, null, 0, null, 0], ["ส.ค.", 11, 2026, "actual pre", 104354, 36820, 14104, 4099, 2960, 1402, 3917, 167656], ["ส.ค.", 11, 2027, "actual curr", null, null, null, null, 0, null, 0], ["ก.ย.", 12, 2026, "actual pre", 100976, 36848, 13514, 3962, 2841, 1065, 3750, 162956], ["ก.ย.", 12, 2027, "actual curr"]], "ลูกหนี้กลุ่ม P": [["Fiscal month", "month order", "Year label", "Metric type", "ลูกหนี้เอกชน (P)"], ["ต.ค.", 1, 2025, "actual pre", 12339233.96], ["ต.ค.", 1, 2026, "actual curr", 15202180.11], ["พ.ย.", 2, 2025, "actual pre", 13793434.42], ["พ.ย.", 2, 2026, "actual curr"], ["ธ.ค.", 3, 2025, "actual pre", 12000005.96], ["ธ.ค.", 3, 2026, "actual curr"], ["ม.ค.", 4, 2026, "actual pre", 12036255.08], ["ม.ค.", 4, 2027, "actual curr"], ["ก.พ.", 5, 2026, "actual pre", 15639850.42], ["ก.พ.", 5, 2027, "actual curr"], ["มี.ค.", 6, 2026, "actual pre", 12502545.88], ["มี.ค.", 6, 2027, "actual curr"], ["เม.ย.", 7, 2026, "actual pre", 14446350.88], ["เม.ย.", 7, 2027, "actual curr"], ["พ.ค.", 8, 2026, "actual pre", 14912596.7], ["พ.ค.", 8, 2027, "actual curr"], ["มิ.ย.", 9, 2026, "actual pre", 14333326.4], ["มิ.ย.", 9, 2027, "actual curr"], ["ก.ค.", 10, 2026, "actual pre", 13533099.65], ["ก.ค.", 10, 2027, "actual curr"], ["ส.ค.", 11, 2026, "actual pre", 13219388.84], ["ส.ค.", 11, 2027, "actual curr"], ["ก.ย.", 12, 2026, "actual pre", 15224110.59], ["ก.ย.", 12, 2027, "actual curr"]], "Ebill Etax": [["Fiscal month", "month order", "Year label", "Metric type", "จำนวนใบแจ้งหนี้ที่ออก (ฉบับ)", "จำนวนที่ลงทะเบียน E-bill  E-Tax ", "คิดเป็น % ของลูกค้าทั้งหมด"], ["ต.ค.", 1, 2025, "actual pre", 165625, 50175, 0.3029433962264151], ["ต.ค.", 1, 2026, "actual curr", 167281, 59270, 0.3513], ["พ.ย.", 2, 2025, "actual pre", 165993, 50744, 0.3056996379365395], ["พ.ย.", 2, 2026, "actual curr"], ["ธ.ค.", 3, 2025, "actual pre", 165765, 51252, 0.30918468916840103], ["ธ.ค.", 3, 2026, "actual curr"], ["ม.ค.", 4, 2026, "actual pre", 165877, 52071, 0.3139133213163971], ["ม.ค.", 4, 2027, "actual curr"], ["ก.พ.", 5, 2026, "actual pre", 166063, 52947, 0.31883682698734817], ["ก.พ.", 5, 2027, "actual curr"], ["มี.ค.", 6, 2026, "actual pre", 166450, 53734, 0.3228236707720036], ["มี.ค.", 6, 2027, "actual curr"], ["เม.ย.", 7, 2026, "actual pre", 166587, 55495, 0.3331292357747003], ["เม.ย.", 7, 2027, "actual curr"], ["พ.ค.", 8, 2026, "actual pre", 166701, 56684, 0.34003395300568084], ["พ.ค.", 8, 2027, "actual curr"], ["มิ.ย.", 9, 2026, "actual pre", 166756, 57449, 0.3445093429921562], ["มิ.ย.", 9, 2027, "actual curr"], ["ก.ค.", 10, 2026, "actual pre", 166932, 57925, 0.3469975798528742], ["ก.ค.", 10, 2027, "actual curr"], ["ส.ค.", 11, 2026, "actual pre", 167038, 58358, 0.3493696045211269], ["ส.ค.", 11, 2027, "actual curr"], ["ก.ย.", 12, 2026, "actual pre", 167102, 58861, 0.17497504199520567], ["ก.ย.", 12, 2027, "actual curr"]]};
+const MONTHS = ['ต.ค.','พ.ย.','ธ.ค.','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.'];
+const MONTHS_FULL = ['ตุลาคม','พฤศจิกายน','ธันวาคม','มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน'];
+/* agg: sum = รวมรายเดือน, last = ค่า ณ สิ้นงวด · good: up/down/neutral · pp: ส่วนต่างเป็นจุด % · hint/pres: ชื่อหัวคอลัมน์ (จับจากหัวตาราง) */
+const CH='ช่องทางการรับชำระค่าน้ำ', CH_SH='ช่องทางการรับชำระค่าน้ำ', EB='Ebill Etax';
+const METRICS = [
+  {key:'total', sheet:CH, hint:'รวม', pres:'Mobile', grp:'ช่องทางการรับชำระค่าน้ำ', short:'รวม', label:'รับชำระรวมทุกช่องทาง', unit:'รายการ', dp:0, scale:1, agg:'sum', good:'neutral'},
+  {key:'mob',  sheet:CH, hint:'Mobile', pres:'Mobile', grp:'ช่องทางการรับชำระค่าน้ำ', short:'Mobile/KTB', label:'Mobile Application / KTB Cross Bank', unit:'รายการ', dp:0, scale:1, agg:'sum', good:'neutral', of:'total'},
+  {key:'auto', sheet:CH, hint:'หักบัญชี', pres:'Mobile', grp:'ช่องทางการรับชำระค่าน้ำ', short:'หักบัญชี/เครดิต', label:'หักบัญชีธนาคาร/เครดิต', unit:'รายการ', dp:0, scale:1, agg:'sum', good:'neutral', of:'total'},
+  {key:'cs',   sheet:CH, hint:'Counter', pres:'Mobile', grp:'ช่องทางการรับชำระค่าน้ำ', short:'Counter Service', label:'Counter Service', unit:'รายการ', dp:0, scale:1, agg:'sum', good:'neutral', of:'total'},
+  {key:'oth_br', sheet:CH, hint:'ต่างสาขา', pres:'Mobile', grp:'ช่องทางการรับชำระค่าน้ำ', short:'ต่างสาขา', label:'รับชำระต่างสาขา ฯ', unit:'รายการ', dp:0, scale:1, agg:'sum', good:'neutral', of:'total'},
+  {key:'office', sheet:CH, hint:'ที่สำนักงาน', pres:'Mobile', grp:'ช่องทางการรับชำระค่าน้ำ', short:'สำนักงาน', label:'รับชำระที่สำนักงาน', unit:'รายการ', dp:0, scale:1, agg:'sum', good:'neutral', of:'total'},
+  {key:'mobile_c', sheet:CH, hint:'จอดจ่ายจร', pres:'Mobile', grp:'ช่องทางการรับชำระค่าน้ำ', short:'จอดจ่ายจร', label:'จอดจ่ายจร', unit:'รายการ', dp:0, scale:1, agg:'sum', good:'neutral', of:'total'},
+  {key:'other', sheet:CH, hint:'อื่น', pres:'Mobile', grp:'ช่องทางการรับชำระค่าน้ำ', short:'อื่น ๆ', label:'ช่องทางอื่น ๆ', unit:'รายการ', dp:0, scale:1, agg:'sum', good:'neutral', of:'total'},
+  {key:'debtP', sheet:'ลูกหนี้กลุ่ม P', hint:'ลูกหนี้', pres:'ลูกหนี้', grp:'ลูกหนี้กลุ่ม P', short:'ลูกหนี้ P', label:'ลูกหนี้เอกชน (P)', unit:'ล้านบาท', dp:2, scale:1e-6, agg:'last', good:'down'},
+  {key:'inv', sheet:EB, hint:'ใบแจ้งหนี้', pres:'ใบแจ้งหนี้', grp:'E-bill / E-Tax', short:'ใบแจ้งหนี้', label:'จำนวนใบแจ้งหนี้ที่ออก', unit:'ฉบับ', dp:0, scale:1, agg:'sum', good:'neutral'},
+  {key:'reg', sheet:EB, hint:'ลงทะเบียน', pres:'ใบแจ้งหนี้', grp:'E-bill / E-Tax', short:'ลงทะเบียน', label:'จำนวนที่ลงทะเบียน E-bill E-Tax', unit:'ราย', dp:0, scale:1, agg:'last', good:'up', of:'inv'},
+  {key:'pct', derived:true, grp:'E-bill / E-Tax', short:'% E-bill', label:'ลงทะเบียน คิดเป็น % ของลูกค้าทั้งหมด', unit:'%', dp:2, scale:100, agg:'last', good:'up', pp:true},
+];
+const SPLIT = [];
+let D = null;
+let state = {m:0, metric:'total', mode:'month'};
+
+/* ---------- parsing ---------- */
+const num = v => (v===null||v===undefined||v==='') ? null : (isFinite(+v) ? +v : null);
+function findSheet(book, name){
+  if (book[name]) return book[name];
+  const norm = s => String(s).trim().replace(/\s+/g,'').replace('ฏ','ฎ').toLowerCase();
+  const k = Object.keys(book).find(k=>norm(k)===norm(name));
+  return k ? book[k] : null;
+}
+function parseSeries(rows, col=4, pres=col){
+  const o = {pre:Array(12).fill(null), cur:Array(12).fill(null), fy:null};
+  for (const r of rows.slice(1)){
+    const mo = num(r[1]); const t = String(r[3]||'').trim().toLowerCase(); const yr = num(r[2]);
+    if (!mo || mo<1 || mo>12) continue;
+    const v = num(r[pres])!=null ? num(r[col]) : null;  /* แถวที่ยังไม่กรอกข้อมูล (ช่องหลักว่าง) ถือว่าไม่มีข้อมูล แม้สูตรรวมจะเป็น 0 */
+    if (t==='actual pre') o.pre[mo-1]=v;
+    else if (t==='actual curr'){ o.cur[mo-1]=v; if (yr) o.fy = mo<=3 ? yr+1 : yr; }
+  }
+  return o;
+}
+function colOf(rows, h){
+  const n = x => String(x||'').replace(/\s+/g,'').toLowerCase();
+  const i = rows[0].findIndex(x=>n(x).includes(n(h)));
+  if (i<0) throw new Error('ไม่พบคอลัมน์ "'+h+'"'); return i;
+}
+function normalize(book){
+  const out = {};
+  for (const m of METRICS){
+    if (m.derived) continue;
+    const rows = findSheet(book, m.sheet); if (!rows) throw new Error('ไม่พบชีต "'+m.sheet+'"');
+    out[m.key] = parseSeries(rows, colOf(rows,m.hint), colOf(rows,m.pres));
+  }
+  const eb = findSheet(book, EB);
+  out.pctSheet = parseSeries(eb, colOf(eb,'คิดเป็น'), colOf(eb,'ใบแจ้งหนี้'));
+  out.pct = {pre:[],cur:[]};
+  for (const s of ['pre','cur']) for (let i=0;i<12;i++){ const a=out.reg[s][i], b=out.inv[s][i]; out.pct[s][i] = (a!=null&&b) ? a/b : null; }
+  const fy = out.total.fy;
+  out.fyTh = fy ? (fy<2400 ? fy+543 : fy) : null;
+  out.latest = out.total.cur.reduce((a,v,i)=>v!=null?i:a,-1);
+  return out;
+}
+
+/* ---------- calculations (ค่าดิบ ก่อน scale) ---------- */
+function cumSum(arr, m){ let s=0; for(let i=0;i<=m;i++){ if(arr[i]==null) return null; s+=arr[i]; } return s; }
+const cfg = key => METRICS.find(x=>x.key===key) || SPLIT.find(x=>x.key===key);
+function valueAt(key, series, m, mode){
+  const c = cfg(key);
+  if (key==='avg'){
+    if (mode==='month') return D.avg[series][m];
+    const w=cumSum(D.water[series],m), n=cumSum(D.cust[series],m);
+    return (w!=null&&n)? w/n : null;
+  }
+  const arr = D[key][series];
+  if (mode==='month' || c.agg==='last') return arr[m];
+  return cumSum(arr, m);
+}
+/* ค่าเดือนก่อนหน้า: ต.ค. เทียบ ก.ย. ของปีก่อน */
+function prevMonth(key, m){ return m>0 ? valueAt(key,'cur',m-1,'month') : valueAt(key,'pre',11,'month'); }
+const sc = (key,v) => v==null ? null : v*(cfg(key).scale||1);
+
+/* ---------- formatting ---------- */
+const fmt = (v,dp)=> v==null ? '–' : v.toLocaleString('th-TH',{minimumFractionDigits:dp,maximumFractionDigits:dp});
+function chip(cur, base, dp, good='up', pp=false){
+  if (cur==null || base==null) return '<span class="chip flat">–</span>';
+  const d = cur-base;
+  if (Math.abs(d) < Math.pow(10,-dp)/2) return `<span class="chip flat" title="เท่าเดิม">● 0%</span>`;
+  const neu = good==='neutral', isGood = (d>0) === (good==='up');
+  const ic = d>0?'▲':'▼', sign = d>0?'+':'';
+  const txt = pp ? `${sign}${fmt(d,2)}%` : (base!==0 ? `${sign}${fmt(d/Math.abs(base)*100,2)}%` : `${sign}${fmt(d,dp)}`);
+  return `<span class="chip ${neu?'flat':(isGood?'up':'down')}" title="${d>0?'เพิ่มขึ้น':'ลดลง'} ${sign}${fmt(d,dp)}${neu?'':' ('+(isGood?'ดีขึ้น':'แย่ลง')+')'}">${ic} ${txt}</span>`;
+}
+
+/* ---------- KPI cards ---------- */
+function kpiCard(m){
+  const c=sc(m.key,valueAt(m.key,'cur',state.m,'month')), p=sc(m.key,valueAt(m.key,'pre',state.m,'month'));
+  const pm=sc(m.key,prevMonth(m.key,state.m));
+  const tot = m.of ? valueAt(m.of,'cur',state.m,'month') : null;
+  const share = m.of && c!=null && tot ? `<span class="na2" title="สัดส่วนของยอดรวม"> · ${fmt(c/tot*100,2)}% ของยอดรวม</span>` : '';
+  return `<div class="card kpi">
+    <div class="lbl">${m.label}</div>
+    ${c==null ? '<div class="na">ยังไม่มีข้อมูลเดือนนี้</div>' : `<div class="val">${fmt(c,m.dp)}<span class="u">${m.unit}</span>${share}</div>`}
+    <div class="cmp">
+      <span class="k">ปีก่อน</span><span class="v">${fmt(p,m.dp)}</span>${chip(c,p,m.dp,m.good,m.pp)}
+      <span class="k">เดือนก่อน</span><span class="v">${fmt(pm,m.dp)}</span>${chip(c,pm,m.dp,m.good,m.pp)}
+    </div>
+  </div>`;
+}
+function badSplitCard(){
+  const m=state.m, rows=SPLIT.map(s=>{const c=valueAt(s.key,'cur',m,'month'), p=valueAt(s.key,'pre',m,'month');
+    return `<span class="k">${s.label.replace('หนี้สูญ – ','')}</span><span class="v" style="color:var(--text)">${fmt(c,2)}</span>${chip(c,p,2,s.good)}`;}).join('');
+  return `<div class="card kpi"><div class="lbl">หนี้สูญแยกตามช่องทาง <span class="na2">· บาท · เทียบปีก่อน</span></div>
+    <div class="cmp" style="border-top:0;margin-top:4px;padding-top:4px;row-gap:8px;column-gap:5px;font-size:12.5px">${rows}</div></div>`;
+}
+
+/* ---------- SVG chart ---------- */
+function renderChart(){
+  const m = METRICS.find(x=>x.key===state.metric), mode=state.mode;
+  const host = document.getElementById('chart');
+  const series = {pre:[],cur:[]};
+  for (const s of ['pre','cur']) for (let i=0;i<12;i++) series[s][i]=sc(m.key,valueAt(m.key,s,i,mode));
+  const modeTxt = mode==='cum' ? (m.agg==='last' ? ' — ค่า ณ สิ้นเดือน (ไม่ใช่ผลรวม)' : m.agg==='ratio' ? ' — เฉลี่ยสะสมตั้งแต่ ต.ค.' : ' — สะสมตั้งแต่ ต.ค.') : '';
+  document.getElementById('chartUnit').textContent = `${m.label} (${m.unit})${modeTxt}`;
+
+  const wpx = host.clientWidth || 960, topPx = host.getBoundingClientRect().top + window.scrollY;
+  const availPx = window.innerHeight - topPx - 50;
+  const H = Math.round(Math.max(130, Math.min(400, availPx * 960 / wpx)));
+  const W=960,L=70,R=16,T=34,B=34, pw=W-L-R, ph=H-T-B;
+  const all=[...series.pre,...series.cur].filter(v=>v!=null);
+  const mx = niceMax(Math.max(...all,0));
+  const y = v => T+ph-(v/mx)*ph;
+  const band = pw/12, cx = i => L+band*i+band/2;
+  let g='';
+  for (let k=0;k<=4;k++){ const v=mx*k/4, yy=y(v);
+    g+=`<line x1="${L}" x2="${W-R}" y1="${yy}" y2="${yy}" stroke="var(--grid)" stroke-width="1"/>`;
+    g+=`<text x="${L-8}" y="${yy+4}" text-anchor="end">${axisFmt(v)}</text>`; }
+  MONTHS.forEach((mo,i)=>{ g+=`<text x="${cx(i)}" y="${H-12}" text-anchor="middle" ${i===state.m?'style="font-weight:700;fill:var(--text)"':''}>${mo}</text>`; });
+  g = `<rect x="${L+band*state.m+2}" y="${T}" width="${band-4}" height="${ph}" fill="var(--surface-2)" rx="6"/>` + g;
+
+  if (mode==='month' || m.agg!=='sum'){
+    const bw=Math.min(22,(band-14)/2);
+    for (let i=0;i<12;i++){
+      const x0 = cx(i)-bw-1, x1 = cx(i)+1;
+      if (series.pre[i]!=null) g+=colPath(x0,y(series.pre[i]),bw,y(0),'var(--s-pre)');
+      if (series.cur[i]!=null) g+=colPath(x1,y(series.cur[i]),bw,y(0),'var(--s-cur)');
+      g += pairLabels(i, series, y, m, x0+bw/2, x1+bw/2, cx(i), 5);
+    }
+  } else {
+    for (const [s,col] of [['pre','var(--s-pre)'],['cur','var(--s-cur)']]){
+      const pts = series[s].map((v,i)=>v==null?null:[cx(i),y(v)]);
+      let d='', started=false;
+      pts.forEach(p=>{ if(!p){started=false;return;} d+=(started?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1); started=true; });
+      g+=`<path d="${d}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+      const last = pts.reduce((a,p)=>p||a,null);
+      if (s==='cur') pts.forEach(p=>{ if(p) g+=`<circle cx="${p[0]}" cy="${p[1]}" r="4.5" fill="${col}" stroke="var(--surface)" stroke-width="2"/>`; });
+      else if (last) g+=`<circle cx="${last[0]}" cy="${last[1]}" r="4" fill="${col}" stroke="var(--surface)" stroke-width="2"/>`;
+    }
+  }
+  if (!(mode==='month' || m.agg!=='sum')) for (let i=0;i<12;i++) g += pairLabels(i, series, y, m, cx(i), cx(i), cx(i), 9);
+  for (let i=0;i<12;i++) g+=`<rect class="hit" data-i="${i}" x="${L+band*i}" y="${T}" width="${band}" height="${ph}" fill="transparent"/>`;
+  host.querySelector('svg')?.remove();
+  host.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟ ${m.label}">${g}</svg>`);
+
+  const tip = document.getElementById('tip');
+  host.querySelectorAll('.hit').forEach(el=>{
+    el.addEventListener('mousemove',e=>{
+      const i=+el.dataset.i, c=series.cur[i], p=series.pre[i];
+      tip.innerHTML = `<b>${MONTHS_FULL[i]}${mode==='cum'&&m.agg==='sum'?' (สะสม)':''}</b>
+        <div class="r"><span><i class="sw" style="background:var(--s-cur)"></i>ปัจจุบัน</span><span>${fmt(c,m.dp)}</span></div>
+        <div class="r"><span><i class="sw" style="background:var(--s-pre)"></i>ปีก่อน</span><span>${fmt(p,m.dp)}</span></div>
+        ${c!=null?`<div style="margin-top:6px">เทียบปีก่อน ${chip(c,p,m.dp,m.good,m.pp)}</div>`:''}`;
+      const r = host.getBoundingClientRect();
+      let x = e.clientX-r.left+14; if (x+220>r.width) x = e.clientX-r.left-230;
+      tip.style.left=x+'px'; tip.style.top=(e.clientY-r.top-20)+'px'; tip.style.opacity=1;
+    });
+    el.addEventListener('mouseleave',()=>tip.style.opacity=0);
+  });
+
+  let tb = `<table><thead><tr><th>เดือน</th><th>ปีก่อน</th><th>ปัจจุบัน</th><th>เทียบปีก่อน</th></tr></thead><tbody>`;
+  for (let i=0;i<12;i++) tb+=`<tr><td>${MONTHS[i]}</td><td>${fmt(series.pre[i],m.dp)}</td><td>${fmt(series.cur[i],m.dp)}</td><td>${series.cur[i]!=null?chip(series.cur[i],series.pre[i],m.dp,m.good,m.pp):'–'}</td></tr>`;
+  document.getElementById('chartTable').innerHTML = tb+'</tbody></table>';
+}
+function colPath(x,yTop,w,yBase,fill){
+  const h=yBase-yTop; if (h<=0) return '';
+  const r=Math.min(4,h,w/2);
+  return `<path d="M${x},${yBase}V${yTop+r}Q${x},${yTop} ${x+r},${yTop}H${x+w-r}Q${x+w},${yTop} ${x+w},${yTop+r}V${yBase}Z" fill="${fill}"/>`;
+}
+function niceMax(v){ if(v<=0) return 4; const raw=v*1.05/4, e=Math.pow(10,Math.floor(Math.log10(raw))); let st=10*e; for (const s of [1,2,2.5,5,10]) if (s*e>=raw){ st=s*e; break; } return st*4; }
+/* ป้ายค่า: ถ้ามีทั้งปีก่อนและปัจจุบันในเดือนเดียวกัน ซ้อนเป็น 2 แถวกึ่งกลางเดือน (ปัจจุบันอยู่บน) */
+function pairLabels(i, series, y, m, xPre, xCur, xMid, gap){
+  const p=series.pre[i], c=series.cur[i]; const T=(x,yy,cls,v)=>`<text x="${x}" y="${yy}" text-anchor="middle" class="vl ${cls}">${labelFmt(v,m)}</text>`;
+  if (p!=null && c!=null){ const top=Math.min(y(p),y(c))-gap; return T(xMid,top-12,'cur',c)+T(xMid,top,'pre',p); }
+  if (p!=null) return T(xPre,y(p)-gap,'pre',p);
+  if (c!=null) return T(xCur,y(c)-gap,'cur',c);
+  return '';
+}
+/* ป้ายค่าบนกราฟ: ย่อหลักพัน/ล้าน ให้ไม่ชนกัน */
+function labelFmt(v,m){ if (v==null) return ''; const a=Math.abs(v);
+  if (a>=1e6) return (v/1e6).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})+'M';
+  if (a>=1e4) return (v/1e3).toLocaleString('th-TH',{minimumFractionDigits:1,maximumFractionDigits:1})+'K';
+  if (a>=1000) return v.toLocaleString('th-TH',{maximumFractionDigits:0});
+  const dp=Math.min(m.dp,2); return v.toLocaleString('th-TH',{minimumFractionDigits:dp,maximumFractionDigits:dp}); }
+function axisFmt(v){ if (v>=1e6) return (v/1e6).toLocaleString('th-TH',{maximumFractionDigits:1})+'M'; if (v>=10000) return (v/1000).toLocaleString('th-TH',{maximumFractionDigits:0})+'K'; return v.toLocaleString('th-TH',{maximumFractionDigits: v<10 && v%1 ? 1 : 0}); }
+
+/* ---------- ช่องทางรับชำระ (กราฟแท่งแนวนอน) ---------- */
+function renderChan(){
+  const ch = METRICS.filter(m=>m.of==='total'), m=state.m;
+  const cur = ch.map(x=>valueAt(x.key,'cur',m,'month')), pre = ch.map(x=>valueAt(x.key,'pre',m,'month'));
+  const tot = valueAt('total','cur',m,'month'), totP = valueAt('total','pre',m,'month');
+  document.getElementById('chanTitle').textContent = `รับชำระค่าน้ำ แยกตามช่องทาง ${MONTHS[m]}`+(tot!=null?` · รวม ${fmt(tot,0)} รายการ`:'');
+  document.getElementById('chanLeg').innerHTML = '<span><i class="sw" style="background:var(--s-cur)"></i>ปัจจุบัน</span><span><i class="sw" style="background:var(--s-pre)"></i>ปีก่อน</span>';
+  const mx = Math.max(1,...cur.filter(v=>v!=null),...pre.filter(v=>v!=null));
+  const w = v => v==null?0:(v/mx*100).toFixed(1);
+  const order = ch.map((_,i)=>i).sort((a,b)=>(cur[b]??-1)-(cur[a]??-1));
+  document.getElementById('chanChart').innerHTML = order.map(i=>`<div class="crow"><div class="nm">${ch[i].label}</div><div class="bb">
+    <div class="b c"><i style="width:${w(cur[i])}%"></i><span>${fmt(cur[i],0)}</span>${chip(cur[i],pre[i],0,'neutral')}</div>
+    <div class="b p"><i style="width:${w(pre[i])}%"></i><span>${fmt(pre[i],0)}</span></div></div></div>`).join('') + `<div class="crow tot"><div class="nm"><b>รวมทุกช่องทาง</b></div><div class="bb"><div class="b c"><span style="font-size:15px">${fmt(tot,0)} รายการ</span>${chip(tot,totP,0,'neutral')}</div><div class="b p"><span>${fmt(totP,0)} (ปีก่อน)</span></div></div></div>`;
+}
+
+/* ---------- data note ---------- */
+function renderNote(){
+  const L=D.latest, n=D.total.cur.filter(v=>v!=null).length, it=[];
+  it.push(`<li>มีผลจริงปีปัจจุบัน ${n} เดือน · ไฟล์นี้ไม่มีเป้าหมาย จึงเทียบกับปีก่อนและเดือนก่อนหน้า (เดือน ต.ค. เทียบ ก.ย. ของปีก่อน)</li>`);
+  it.push(`<li>สีตัวเลขเปลี่ยนแปลง: เขียว = ดีขึ้น, แดง = แย่ลง (ลูกหนี้ P ลดลง = ดี, ลงทะเบียน E-bill เพิ่ม = ดี) · ช่องทางรับชำระและใบแจ้งหนี้เป็นสีเทา (ไม่ตัดสินดี/แย่) · ส่วนต่างของ % แสดงเป็นผลต่างตรง ๆ (เช่น 30.29% → 35.43% = +5.14%)</li>`);
+  it.push(`<li>% ลงทะเบียน E-bill/E-Tax คำนวณเอง = จำนวนลงทะเบียน ÷ จำนวนใบแจ้งหนี้ที่ออก (ไม่ใช้คอลัมน์ % ในไฟล์)</li>`);
+  const keys = METRICS.filter(m=>m.of==='total').map(m=>m.key);
+  if (L>=0 && keys.every(k=>D[k].cur[L]!=null)){
+    const sum = keys.reduce((a,k)=>a+D[k].cur[L],0), t = D.total.cur[L];
+    it.push(`<li>ตรวจทาน: ผลรวมรายช่องทาง เดือน ${MONTHS[L]} = ${fmt(sum,0)} เทียบยอดรวม ${fmt(t,0)} — ${sum===t?'ตรงกัน ✓':'ไม่ตรงกัน ⚠'}</li>`);
+  }
+  const bad=[];
+  for (const s of ['pre','cur']) for (let i=0;i<12;i++){ const a=D.pctSheet[s][i], b=D.pct[s][i];
+    if (a!=null && b!=null && Math.abs(a-b)>0.002) bad.push(`${MONTHS[i]} ${s==='pre'?'ปีก่อน':'ปัจจุบัน'} (ไฟล์ ${fmt(a*100,2)}% / คำนวณ ${fmt(b*100,2)}%)`); }
+  if (bad.length) it.push(`<li>⚠ คอลัมน์ % ในไฟล์ไม่ตรงกับการคำนวณ: ${bad.join(', ')}</li>`);
+  const dup = METRICS.filter(m=>!m.derived && D[m.key].cur[0]!=null && D[m.key].cur[0]!==0 && D[m.key].cur[0]===D[m.key].pre[11]).map(m=>m.short);
+  if (dup.length>=2) it.push(`<li>⚠ ต.ค. ปีปัจจุบัน มี ${dup.length} ตัวชี้วัดที่ค่าเท่ากับ ก.ย. ปีก่อนเป๊ะ (${dup.join(', ')}) — ควรตรวจว่าคัดลอกค่ามาจากเดือนก่อนหรือไม่</li>`);
+  document.getElementById('dataNote').innerHTML = '<ul>'+it.join('')+'</ul>';
+}
+
+/* ---------- wiring ---------- */
+function renderAll(){
+  const fy = D.fyTh ? `ปีงบประมาณ ${D.fyTh}` : '';
+  document.getElementById('hMonth').textContent = `ประจำเดือน ${MONTHS_FULL[state.m]} ${fy?'('+fy+')':''}`;
+  document.getElementById('secTitle').textContent = `เดือน ${MONTHS_FULL[state.m]}`;
+  document.getElementById('t1').textContent = `เทียบเดือนเดียวกันปีก่อน และเดือนก่อนหน้า (ชี้ที่ % เพื่อดูค่าต่าง)`;
+  document.getElementById('kpiMonth').innerHTML = [...new Set(METRICS.filter(m=>m.grp!==CH).map(m=>m.grp))].map(g=>`<h3 class="grp">${g}</h3><div class="grid3">${METRICS.filter(m=>m.grp===g).map(m=>kpiCard(m)).join('')}</div>`).join('');
+  renderChan();
+}
+function setup(book, sourceLabel){
+  D = normalize(book);
+  state.m = Math.max(0, D.latest);
+  const sel = document.getElementById('selMonth');
+  sel.innerHTML = MONTHS_FULL.map((n,i)=>`<option value="${i}" ${D.total.cur[i]==null?'disabled':''}>${n}${D.total.cur[i]==null?' (ยังไม่มีผล)':''}</option>`).join('');
+  sel.value = state.m;
+  renderNote(); renderAll();
+  document.getElementById('foot').textContent = `แหล่งข้อมูล: ${sourceLabel} · ปีก่อน = ปีงบ ${D.fyTh?D.fyTh-1:''}, ปัจจุบัน = ปีงบ ${D.fyTh||''}`;
+}
+document.getElementById('selMonth').addEventListener('change',e=>{state.m=+e.target.value; renderAll();});
+
+document.getElementById('btnLoad').addEventListener('click',()=>document.getElementById('fileIn').click());
+document.getElementById('fileIn').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f) return; const st=document.getElementById('loadStatus');
+  try{
+    st.textContent='กำลังอ่านไฟล์…';
+    if (!window.XLSX) await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';s.onload=res;s.onerror=()=>rej(new Error('โหลดตัวอ่าน xlsx ไม่ได้ (ต้องต่ออินเทอร์เน็ต)'));document.head.appendChild(s);});
+    const wb = XLSX.read(await f.arrayBuffer(),{type:'array'});
+    const book={}; wb.SheetNames.forEach(n=>book[n]=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:null,raw:true}));
+    setup(book, f.name); st.textContent='โหลดแล้ว: '+f.name;
+  }catch(err){ st.textContent='⚠ '+err.message; }
+  e.target.value='';
+});
+
+setup(RAW, 'สจก_BI.xlsx (ข้อมูลฝังในไฟล์)');
+</script>
+</body>
+</html>
